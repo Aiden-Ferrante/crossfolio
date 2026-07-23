@@ -22,6 +22,9 @@ def main() -> None:
     p_eval = sub.add_parser("evaluate", help="evaluate run dir(s) on the test block")
     p_eval.add_argument("--compare", nargs="+", required=True, metavar="RUN_DIR")
 
+    p_power = sub.add_parser("power", help="planted-signal power test sweep")
+    p_power.add_argument("--quick", action="store_true", help="smoke mode: 1 seed, 2 gammas, D=2000")
+
     args = ap.parse_args()
 
     if args.cmd == "build-dataset":
@@ -58,6 +61,10 @@ def main() -> None:
         from .evaluate import compare
 
         compare([Path(p) for p in args.compare])
+    elif args.cmd == "power":
+        from .power import run_sweep
+
+        run_sweep(quick=args.quick)
 
 
 if __name__ == "__main__":

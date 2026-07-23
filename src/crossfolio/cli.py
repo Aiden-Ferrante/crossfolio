@@ -11,6 +11,7 @@ def main() -> None:
 
     sub.add_parser("build-dataset", help="read the stocklake lake, write data/panel.npz")
     sub.add_parser("inspect", help="print panel + split summary")
+    sub.add_parser("stage0", help="the original idea: direct trainable weights, both losses")
 
     args = ap.parse_args()
 
@@ -26,6 +27,10 @@ def main() -> None:
 
         panel = load_panel()
         print(panel.summary())
+    elif args.cmd == "stage0":
+        from .stage0 import run
+
+        run()
 
 
 if __name__ == "__main__":

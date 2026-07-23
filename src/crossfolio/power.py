@@ -21,14 +21,19 @@ from .config import RUNS, Cfg, DataCfg, LossCfg, ModelCfg, TrainCfg
 from .data.dataset import AnchorDataset, Panel
 from .data.splits import purged_split, valid_anchors
 from .models import REGISTRY
-from .synth import cross_sectional_ic, forward_returns, make_panel, make_shocks, oracle_ic
+from .synth import cross_sectional_ic, forward_returns, make_panel, make_shocks
 from .train import train
 
-GAMMAS = [0, 10, 20, 40, 80]     # bps/month
+from .universe import N as UNIVERSE_N
+
+GAMMAS = [0, 5, 10, 15, 20, 40]  # bps/month (v2 grid; v1 was {0,10,20,40,80} at N=120)
 SEEDS = [0, 1, 2]
 MODELS = ["linear", "attention"]
 LOSSES = ["sharpe", "ic"]
-N, D_FULL, D_QUICK = 120, 6712, 2000
+# 1-seed linear control: linear was blind at every strength in v1; keep it as
+# a control arm without paying 3 seeds for it.
+ARM_SEEDS = {"attention": SEEDS, "linear": [0]}
+N, D_FULL, D_QUICK = UNIVERSE_N, 5000, 2000
 
 THRESHOLDS = """## Pre-registered thresholds (written before any run)
 
@@ -41,6 +46,12 @@ THRESHOLDS = """## Pre-registered thresholds (written before any run)
   in advance so it can't become a post-hoc story.
 - Recovery fraction = model test IC / same-panel empirical oracle test IC.
 """
+
+
+def _ranks(a: np.ndarray) -> np.ndarray:
+    """Per-row ranks along the last axis; feeding these to cross_sectional_ic
+    gives Spearman rank-IC — the fat-tail-robust headline metric at H=5."""
+    return a.argsort(-1).argsort(-1).astype(np.float64)
 
 
 def _arm_cfg(loss_name: str, seed: int) -> Cfg:
@@ -75,7 +86,7 @@ def _eval_test(run_dir: Path, panel: Panel, cfg: Cfg) -> dict:
 
     H = cfg.data.H
     y, y_spy = forward_returns(panel, test, H)
-    ic_daily = cross_sectional_ic(logits, y)
+    ic_daily = cross_sectional_ic(_ranks(logits), _ranks(y))  # rank-IC (Spearman)
     ic_monthly = ic_daily[::H]
     excess_m = (weights[::H] * y[::H]).sum(-1) - y_spy[::H]
     se = (1 / np.sqrt(panel.N)) / np.sqrt(len(ic_monthly))
@@ -93,9 +104,11 @@ def _eval_test(run_dir: Path, panel: Panel, cfg: Cfg) -> dict:
 
 
 def run_sweep(quick: bool = False) -> Path:
-    gammas = [0, 80] if quick else GAMMAS
+    gammas = [0, 40] if quick else GAMMAS
     seeds = [0] if quick else SEEDS
     D = D_QUICK if quick else D_FULL
+    base = Cfg()
+    T, H = base.data.T, base.data.H
     out = RUNS / f"power-{time.strftime('%Y%m%d-%H%M%S')}{'-quick' if quick else ''}"
     out.mkdir(parents=True)
     (out / "POWER.md").write_text(f"# Planted-signal power test\n\n{THRESHOLDS}\n")
@@ -107,9 +120,10 @@ def run_sweep(quick: bool = False) -> Path:
         shocks = make_shocks(D, N, seed)
         for gamma in gammas:
             panel, meta = make_panel(gamma, shocks)
-            anchors = valid_anchors(panel.D, 60, 21)
-            _, _, test = purged_split(anchors, 0.70, 0.15, 21)
-            orc = oracle_ic(panel, meta, test[::21], 21)
+            anchors = valid_anchors(panel.D, T, H)
+            _, _, test = purged_split(anchors, 0.70, 0.15, H)
+            y_orc, _ = forward_returns(panel, test[::H], H)
+            orc = cross_sectional_ic(_ranks(meta["z"][test[::H]]), _ranks(y_orc))
             orc_row = {"gamma": gamma, "seed": seed, "model": "oracle", "loss": "-",
                        "test_ic_monthly": float(orc.mean()),
                        "ic_se": float((1 / np.sqrt(N)) / np.sqrt(len(orc)))}
@@ -119,6 +133,8 @@ def run_sweep(quick: bool = False) -> Path:
             print(f"[g={gamma:2} s={seed}] oracle IC {orc.mean():+.4f}")
 
             for model_name in MODELS:
+                if seed not in ARM_SEEDS[model_name]:
+                    continue
                 for loss_name in LOSSES:
                     cfg = _arm_cfg(loss_name, seed)
                     name = f"{out.name}/g{gamma:02d}-s{seed}-{model_name}-{loss_name}"

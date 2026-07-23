@@ -28,10 +28,11 @@ REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "src" / "crossfolio" / "universe.py"
 SECTOR_CACHE = REPO / "data" / "sector_cache.json"
 
-INCEPTION_CUTOFF = "2000-01-03"
+INCEPTION_CUTOFF = "2006-01-03"   # campaign v2; v1 used 2000-01-03
 MIN_COVERAGE = 0.98      # fraction of SPY trading days since cutoff
 FRESHNESS_DAYS = 7       # last bar must be within this many days of lake max
-TOP_K = 120              # buffer above the 100-minimum
+TOP_K = 500              # campaign v2; v1 used 120
+MIN_UNIVERSE = 400       # fail if fewer pass all filters
 
 # Not equities: indices, FX, crypto, futures, foreign listings.
 NON_EQUITY_PATTERNS = [r"^\^", r"=X$", r"-USD$", r"=F$", r"\.\w+$"]
@@ -140,8 +141,8 @@ def main() -> None:
              if (lake_max - date.fromisoformat(r["last_bar"])).days <= FRESHNESS_DAYS]
     dropped = len(rows) - len(fresh)
     selected = fresh[:TOP_K]
-    if len(selected) < 100:
-        sys.exit(f"only {len(selected)} tickers pass all filters (need >= 100); "
+    if len(selected) < MIN_UNIVERSE:
+        sys.exit(f"only {len(selected)} tickers pass all filters (need >= {MIN_UNIVERSE}); "
                  f"{dropped} dropped for staleness — refresh the lake first")
 
     tickers = [r["ticker"] for r in selected]

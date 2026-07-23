@@ -40,6 +40,22 @@ class MultiHeadSelfAttention(nn.Module):
         return self.proj(out), attn
 
 
+class Block(nn.Module):
+    """Pre-LN transformer block; attention runs over the stock axis."""
+
+    def __init__(self, d: int, heads: int):
+        super().__init__()
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.mhsa = MultiHeadSelfAttention(d, heads)
+        self.ffn = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        a, attn = self.mhsa(self.ln1(x))
+        x = x + a
+        x = x + self.ffn(self.ln2(x))
+        return x, attn
+
+
 class CrossSectionalAttention(Allocator):
     def __init__(self, N, T, cfg):
         super().__init__(N, T, cfg)
@@ -49,19 +65,19 @@ class CrossSectionalAttention(Allocator):
             nn.Linear(T, cfg.enc_hidden), nn.GELU(), nn.Linear(cfg.enc_hidden, d)
         )
         # the "token embedding": who the stock IS, alongside how it's been moving
-        self.id_embed = nn.Embedding(N, d)
-        self.ln1, self.ln2, self.ln_out = nn.LayerNorm(d), nn.LayerNorm(d), nn.LayerNorm(d)
-        self.mhsa = MultiHeadSelfAttention(d, cfg.heads)
-        self.ffn = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.id_embed = nn.Embedding(N, d) if cfg.use_id_embed else None
+        self.blocks = nn.ModuleList(Block(d, cfg.heads) for _ in range(cfg.n_blocks))
+        self.ln_out = nn.LayerNorm(d)
         self.head = nn.Linear(d, 1)  # shared across stocks
         with torch.no_grad():
             self.head.weight *= cfg.head_init_scale
             self.head.bias *= cfg.head_init_scale
 
     def logits(self, X: torch.Tensor) -> tuple[torch.Tensor, dict]:
-        B, N, _ = X.shape
-        x = self.encoder(X) + self.id_embed.weight.unsqueeze(0)  # (B, N, d)
-        a, attn = self.mhsa(self.ln1(x))                          # attention over the stock axis
-        x = x + a
-        x = x + self.ffn(self.ln2(x))
+        x = self.encoder(X)                                       # (B, N, d)
+        if self.id_embed is not None:
+            x = x + self.id_embed.weight.unsqueeze(0)
+        attn = None
+        for block in self.blocks:
+            x, attn = block(x)                                    # last block's maps kept
         return self.head(self.ln_out(x)).squeeze(-1), {"attn": attn}  # (B, N), (B, h, N, N)

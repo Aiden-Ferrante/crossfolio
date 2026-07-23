@@ -51,6 +51,15 @@ def mean_ic(logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return (num / den).mean()
 
 
+def rank_ic(logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Spearman: Pearson corr of ranks. The headline EVAL metric at H=5 —
+    weekly returns are fat-tailed and Pearson is outlier-sensitive. Not
+    differentiable (argsort); the training loss stays Pearson `mean_ic`."""
+    rl = logits.argsort(-1).argsort(-1).float()
+    ry = y.argsort(-1).argsort(-1).float()
+    return mean_ic(rl, ry)
+
+
 def make_loss(name: str, hhi_lambda: float):
     """sharpe | mean_excess grade the portfolio scalar (1 outcome/anchor);
     ic grades the cross-section (N outcomes/anchor — densified supervision).

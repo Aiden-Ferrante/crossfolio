@@ -25,6 +25,12 @@ def main() -> None:
     p_power = sub.add_parser("power", help="planted-signal power test sweep")
     p_power.add_argument("--quick", action="store_true", help="smoke mode: 1 seed, 2 gammas, D=2000")
 
+    p_camp = sub.add_parser("campaign", help="long-training campaign stages")
+    p_camp.add_argument("--stage", required=True, choices=["C"], help="B'/D arrive after C")
+    p_camp.add_argument("--hours", type=float, default=12.0)
+    p_camp.add_argument("--resume", default=None,
+                        help="run dir to resume, or 'auto' for the latest")
+
     args = ap.parse_args()
 
     if args.cmd == "build-dataset":
@@ -65,6 +71,10 @@ def main() -> None:
         from .power import run_sweep
 
         run_sweep(quick=args.quick)
+    elif args.cmd == "campaign":
+        from .campaign import run_stage_c
+
+        run_stage_c(args.hours, args.resume)
 
 
 if __name__ == "__main__":

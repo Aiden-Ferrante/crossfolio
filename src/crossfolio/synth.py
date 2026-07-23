@@ -111,3 +111,80 @@ def oracle_ic(panel: Panel, meta: dict, anchors: np.ndarray, H: int) -> np.ndarr
     analytic value."""
     y, _ = forward_returns(panel, anchors, H)
     return cross_sectional_ic(meta["z"][anchors], y)
+
+
+# ---------------------------------------------------------------------------
+# Sim2real pretraining: randomized "cocktail" panels (Stage C).
+# Signals keep fixed economic signs (+momentum, -reversal) — a per-anchor model
+# cannot infer a panel-level latent sign from one snapshot, so free sign
+# randomization would collapse the optimal output to zero. In-context inference
+# is forced instead by regime-conditioned strengths, random lookbacks/subsets,
+# sector-neutral-or-raw z, distractor structure, and a beta "factor trap".
+# Stateless-by-index: panel i is fully determined by rng([base_seed, i]).
+# ---------------------------------------------------------------------------
+
+def make_cocktail_panel(index: int, base_seed: int, N: int, D: int = 1500) -> Panel:
+    rng = np.random.default_rng([base_seed, index])
+    n_sectors = int(rng.integers(5, 21))
+    sector_id = np.arange(N) % n_sectors
+    rng.shuffle(sector_id)
+    beta = rng.uniform(0.8, 1.2, N)
+    mkt_vol, sec_vol, idio_vol = (v * rng.uniform(0.5, 1.5) for v in
+                                  (MARKET_VOL, SECTOR_VOL, IDIO_VOL))
+
+    # vol regimes: 2-4 segments, alternating calm/stressed
+    n_seg = int(rng.integers(2, 5))
+    bounds = np.sort(rng.integers(D // 8, D, n_seg - 1))
+    vol_mult = np.ones(D)
+    for k, (a, b) in enumerate(zip(np.r_[0, bounds], np.r_[bounds, D])):
+        vol_mult[a:b] = 1.0 if k % 2 == 0 else rng.uniform(1.5, 2.5)
+
+    t_shocks = rng.standard_t(4, (D, N)) / np.sqrt(2.0)  # unit-variance t(4)
+    base = (beta * rng.normal(0, mkt_vol, D)[:, None]
+            + rng.normal(0, sec_vol, (D, n_sectors))[:, sector_id]
+            + idio_vol * vol_mult[:, None] * t_shocks)
+
+    # signal cocktail (25% mass at zero each)
+    g_mom = rng.uniform(0, 40) * (rng.random() > 0.25) * 1e-4 / 21
+    g_rev = rng.uniform(0, 40) * (rng.random() > 0.25) * 1e-4 / 21
+    L_mom, gap = int(rng.integers(20, 61)), int(rng.integers(0, 11))
+    L_rev = int(rng.integers(3, 11))
+    subset = rng.random(N) < rng.uniform(0.5, 1.0)          # who carries the signal
+    sector_neutral = bool(rng.random() < 0.5)               # z within sector vs raw
+    # factor trap: beta-correlated drift, sign flips across panels — harvestable
+    # in-panel, poison across panels; the model must learn to neutralize beta
+    g_trap = rng.uniform(0, 20) * rng.choice([-1.0, 1.0]) * 1e-4 / 21
+    trap = g_trap * (beta - beta.mean()) / (beta.std() + 1e-12)
+    stale = rng.random(N) < 0.02                            # ~2% stale-price stocks
+
+    def _z(win: np.ndarray) -> np.ndarray:
+        if sector_neutral:
+            z = np.empty_like(win)
+            for s in range(n_sectors):
+                m = sector_id == s
+                z[m] = (win[m] - win[m].mean()) / (win[m].std() + 1e-12)
+            return z
+        return (win - win.mean()) / (win.std() + 1e-12)
+
+    r = np.empty_like(base)
+    cum = np.zeros((D + 1, N))
+    warm = max(L_mom + gap, L_rev) + 1
+    for t in range(D):
+        drift = trap.copy()
+        if t >= warm:
+            stressed = vol_mult[t] > 1.2
+            if g_mom and not stressed:                       # momentum dies in stress
+                win = cum[t - gap] - cum[t - gap - L_mom]
+                drift = drift + g_mom * _z(win) * subset
+            if g_rev:                                        # reversal grows with vol
+                win = cum[t] - cum[t - L_rev]
+                drift = drift - g_rev * vol_mult[t] * _z(win) * subset
+        r[t] = np.where(stale & (rng.random(N) < 0.3), 0.0, base[t] + drift)
+        cum[t + 1] = cum[t] + r[t]
+
+    return Panel(
+        dates=np.datetime64("2000-01-03") + np.arange(D),
+        returns=r.astype(np.float32),
+        spy=np.log(np.exp(r).mean(axis=1)).astype(np.float32),
+        tickers=[f"X{i:03d}" for i in range(N)],
+    )

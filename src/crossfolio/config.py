@@ -14,9 +14,12 @@ RUNS = REPO / "runs"
 
 @dataclass(frozen=True)
 class DataCfg:
-    T: int = 60            # trailing window, trading days
-    H: int = 21            # grading horizon, trading days (also purge embargo)
-    normalize: bool = True # per-window z-score of X (window-only stats, no leakage)
+    # Campaign v2 defaults (v1 was T=60, H=21, normalize=True — see docs/power/).
+    T: int = 120            # trailing window: Stage C plants lookbacks up to 120d
+    H: int = 5              # weekly grading: 4x less target overlap, embargo 5
+    # Time-axis window z-scoring provably erases momentum-level signals
+    # (tests/test_synth.py regression) — off by default since the power test.
+    normalize: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,10 @@ class ModelCfg:
     d_model: int = 32
     heads: int = 4
     enc_hidden: int = 64
+    n_blocks: int = 1
+    # Off during sim2real pretraining: synthetic stocks have no persistent
+    # identity, so an ID embedding is a pure memorization channel.
+    use_id_embed: bool = True
     # scale on the final head layer's default init; ~1e-2 starts the model at
     # (near) equal weight so it must earn deviations. NOT exact zero: constant
     # logits make Pearson corr 0/0 and can zero the Sharpe std.

@@ -210,14 +210,38 @@ def _report(results: list[dict], out: Path) -> None:
                 f"{r['best_epoch']} | {r['test_excess_sharpe_ann']:+.2f} |")
 
     se = next(r["ic_se"] for r in results if r["model"] != "oracle")
-    lines += ["", f"Detection threshold: 2·SE = {2 * se:.4f}.", "", "## Verdict", ""]
-    for model in MODELS:
-        for loss in LOSSES:
-            g, (mean, _, _) = _agg(results, model, loss)
-            detected = [gi for gi, mi in zip(g, mean) if gi > 0 and mi > 2 * se]
-            lines.append(f"- **{model} / {loss}**: "
-                         + (f"minimum detected γ = {min(detected)} bps/month."
-                            if detected else "no detection at any planted strength."))
+    lines += ["", f"Absolute detection threshold: 2·SE = {2 * se:.4f} (secondary — slow scores are",
+              "serially correlated across anchors, so absolute IC has far fewer effective",
+              "observations than anchor counts suggest).", "",
+              "## Verdict (paired contrasts — the official statistic)", "",
+              "Within-seed IC(γ) − IC(0) cancels the serially-correlated score-baseline noise",
+              "that the paired common-random-numbers design was built to cancel.", ""]
+
+    def paired(model, loss):
+        out = []
+        rows = {(r["gamma"], r["seed"]): r["test_ic_monthly"] for r in results
+                if r["model"] == model and r.get("loss") == loss}
+        gammas = sorted({g for g, _ in rows if g > 0})
+        seeds = sorted({s for g, s in rows if g == 0})
+        for g in gammas:
+            d = [rows[(g, s)] - rows[(0, s)] for s in seeds if (g, s) in rows]
+            if len(d) > 1:
+                m, sem = float(np.mean(d)), float(np.std(d, ddof=1) / np.sqrt(len(d)))
+                out.append((g, m, 2 * sem, m > 2 * sem and m > 0))
+        return out
+
+    arms = [("oracle", "-")] + [(m, l) for m in MODELS for l in LOSSES]
+    for model, loss in arms:
+        rows_p = paired(model, loss)
+        if not rows_p:
+            continue
+        detected = [g for g, m, thr, det in rows_p if det]
+        detail = " ".join(f"γ{g}:{m:+.4f}(±{thr:.4f}){'*' if det else ''}"
+                          for g, m, thr, det in rows_p)
+        lines.append(f"- **{model} / {loss}**: "
+                     + (f"minimum detected γ = {min(detected)} bps/month. " if detected
+                        else "no detection at any planted strength. ")
+                     + detail)
     null_fp = [r for r in results
                if r["model"] != "oracle" and r["gamma"] == 0
                and abs(r["test_ic_monthly"]) > 2 * se]

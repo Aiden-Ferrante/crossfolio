@@ -67,6 +67,32 @@ after the anchor and assert features are unchanged.
   cross-regime, not sequential; loss values are batch-size dependent.
 - Long-only, fully invested, no transaction costs, no shorting, frozen universe.
 
+## The power test (docs/power/)
+
+Before iterating on real-data training, we planted signals of known strength in
+synthetic data (`crossfolio power`) and measured what the harness can recover.
+Results ([curve](docs/power/power_curve.png), [full report](docs/power/POWER.md),
+3 paired seeds, pre-registered thresholds, 0/12 false positives at γ=0):
+
+| arm | minimum detected signal |
+|---|---|
+| attention / IC loss | **40 bps/month** (~80% oracle recovery at 80 bps) |
+| attention / Sharpe loss | 80 bps/month |
+| linear / either loss | never — blind at all strengths |
+
+Three conclusions now carry the project: **(1)** densified cross-sectional
+supervision (IC loss) roughly halves the detectable signal strength — the
+supervision-starvation diagnosis is confirmed and quantified; **(2)** parameter
+sharing is what separates architectures here — 23k shared-weight attention
+learns what 864k unshared linear weights cannot, at any strength and under
+either loss; **(3)** the time-axis window normalization provably erases
+momentum-level signals (`test_synth.py`) — real-data runs should use
+`normalize=False` (confirmed on real data: linear moves off epoch 0 for the
+first time without it). For calibration: real cross-sectional anomalies are
+believed to live in the ~10–40 bps/month range — at the edge of, and mostly
+below, this harness's current detection floor. That is the honest context for
+any real-data result.
+
 ## Repo map
 
 See [ARCHITECTURE.md](ARCHITECTURE.md). One-line version: `config ← data ←

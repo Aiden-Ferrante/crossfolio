@@ -282,7 +282,7 @@ class Pretrainer:
                 log_f.flush()
                 with (self.run_dir / "CAMPAIGN.md").open("a") as f:
                     f.write(f"| {time.strftime('%m-%d %H:%M')} | {self.step} "
-                            f"| {self.examples:,} "
+                            f"| {self.examples:,} | "
                             + " | ".join(f"{metrics.get(f'synth_ic_g{g}', float('nan')):+.4f}"
                                          for g in p.val_gammas)
                             + f" | {metrics.get('real_val_rank_ic', float('nan')):+.4f} |\n")

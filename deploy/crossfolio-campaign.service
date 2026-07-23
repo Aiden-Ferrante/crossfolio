@@ -1,0 +1,15 @@
+[Unit]
+Description=crossfolio sim2real pretraining campaign (Stage C)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/code/crossfolio
+ExecStart=%h/Desktop/code/crossfolio/.venv/bin/crossfolio campaign --stage C --hours 24 --resume auto
+Nice=10
+Restart=on-failure
+RestartSec=30
+# SIGTERM handler checkpoints and exits 0; give it time to finish the save
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

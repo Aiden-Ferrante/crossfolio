@@ -13,6 +13,12 @@ def main() -> None:
     sub.add_parser("inspect", help="print panel + split summary")
     sub.add_parser("stage0", help="the original idea: direct trainable weights, both losses")
 
+    p_train = sub.add_parser("train", help="train a model through the shared harness")
+    p_train.add_argument("--model", required=True,
+                         choices=["equal_weight", "linear", "attention"])
+    p_train.add_argument("--loss", default=None, choices=["sharpe", "mean_excess"])
+    p_train.add_argument("--stride", type=int, default=None, help="train-anchor stride")
+
     args = ap.parse_args()
 
     if args.cmd == "build-dataset":
@@ -31,6 +37,18 @@ def main() -> None:
         from .stage0 import run
 
         run()
+    elif args.cmd == "train":
+        import dataclasses
+
+        from .config import Cfg, LossCfg, TrainCfg
+        from .train import train
+
+        cfg = Cfg()
+        if args.loss:
+            cfg = dataclasses.replace(cfg, loss=LossCfg(name=args.loss, hhi_lambda=cfg.loss.hhi_lambda))
+        if args.stride:
+            cfg = dataclasses.replace(cfg, train=dataclasses.replace(cfg.train, train_stride=args.stride))
+        train(args.model, cfg)
 
 
 if __name__ == "__main__":

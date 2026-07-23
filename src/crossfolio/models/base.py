@@ -22,4 +22,5 @@ class Allocator(nn.Module):
 
     def forward(self, X: torch.Tensor) -> tuple[torch.Tensor, dict]:
         z, aux = self.logits(X)
+        aux["logits"] = z
         return torch.softmax(z, dim=-1), aux

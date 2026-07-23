@@ -36,6 +36,10 @@ class ModelCfg:
     d_model: int = 32
     heads: int = 4
     enc_hidden: int = 64
+    # scale on the final head layer's default init; ~1e-2 starts the model at
+    # (near) equal weight so it must earn deviations. NOT exact zero: constant
+    # logits make Pearson corr 0/0 and can zero the Sharpe std.
+    head_init_scale: float = 1.0
 
 
 @dataclass(frozen=True)

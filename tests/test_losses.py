@@ -52,3 +52,36 @@ def test_losses_differentiable():
     w = torch.softmax(theta, dim=-1)
     make_loss("sharpe", 0.05)(w, y, y_spy).backward()
     assert theta.grad is not None and torch.isfinite(theta.grad).all()
+
+
+def test_ic_perfect_anti_orthogonal():
+    B, N, y, y_spy = _batch()
+    w = torch.full((B, N), 1 / N)
+    ic_loss = make_loss("ic", 0.0)
+    assert torch.isclose(ic_loss(w, y, y_spy, logits=y * 3.7), torch.tensor(-1.0), atol=1e-4)
+    assert torch.isclose(ic_loss(w, y, y_spy, logits=-y), torch.tensor(1.0), atol=1e-4)
+    torch.manual_seed(1)
+    noise = torch.randn(B, N)
+    assert abs(float(ic_loss(w, y, y_spy, logits=noise))) < 0.1
+
+
+def test_ic_differentiable_at_constant_logits():
+    """The centered-dot-product form must survive zero logit variance."""
+    B, N, y, y_spy = _batch()
+    logits = torch.zeros(B, N, requires_grad=True)
+    w = torch.softmax(logits, dim=-1)
+    make_loss("ic", 0.0)(w, y, y_spy, logits=logits).backward()
+    assert torch.isfinite(logits.grad).all()
+
+
+def test_mean_ic_matches_numpy():
+    from crossfolio.losses import mean_ic
+
+    torch.manual_seed(2)
+    logits, y = torch.randn(8, 30), torch.randn(8, 30)
+    import numpy as np
+
+    expected = np.mean([
+        np.corrcoef(logits[i].numpy(), y[i].numpy())[0, 1] for i in range(8)
+    ])
+    assert abs(float(mean_ic(logits, y)) - expected) < 1e-5

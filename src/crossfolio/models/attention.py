@@ -54,6 +54,9 @@ class CrossSectionalAttention(Allocator):
         self.mhsa = MultiHeadSelfAttention(d, cfg.heads)
         self.ffn = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
         self.head = nn.Linear(d, 1)  # shared across stocks
+        with torch.no_grad():
+            self.head.weight *= cfg.head_init_scale
+            self.head.bias *= cfg.head_init_scale
 
     def logits(self, X: torch.Tensor) -> tuple[torch.Tensor, dict]:
         B, N, _ = X.shape

@@ -36,14 +36,34 @@ def neg_mean_excess(w, y, y_spy) -> torch.Tensor:
     return -excess_returns(w, y, y_spy).mean()
 
 
-_BASE = {"sharpe": neg_batch_sharpe, "mean_excess": neg_mean_excess}
+def mean_ic(logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Mean per-anchor Pearson corr of logits vs y across the N stocks.
+
+    Centered-dot-product form: stays differentiable at zero logit variance
+    (never route through .std()). Grades LOGITS, not softmax weights — near
+    uniform they're equivalent (softmax is locally affine, corr is affine-
+    invariant) and logits avoid winner-domination once softmax saturates.
+    """
+    l = logits - logits.mean(-1, keepdim=True)
+    t = y - y.mean(-1, keepdim=True)
+    num = (l * t).sum(-1)
+    den = torch.sqrt(((l * l).sum(-1) + EPS) * ((t * t).sum(-1) + EPS))
+    return (num / den).mean()
 
 
 def make_loss(name: str, hhi_lambda: float):
-    base = _BASE[name]
+    """sharpe | mean_excess grade the portfolio scalar (1 outcome/anchor);
+    ic grades the cross-section (N outcomes/anchor — densified supervision).
+    The HHI penalty applies only to portfolio losses: scale-invariant corr
+    doesn't care about the one direction HHI pushes on, they'd only fight."""
+    if name == "ic":
+        def loss(w, y, y_spy, logits) -> torch.Tensor:
+            return -mean_ic(logits, y)
+    else:
+        base = {"sharpe": neg_batch_sharpe, "mean_excess": neg_mean_excess}[name]
 
-    def loss(w, y, y_spy) -> torch.Tensor:
-        return base(w, y, y_spy) + hhi_lambda * hhi(w)
+        def loss(w, y, y_spy, logits=None) -> torch.Tensor:
+            return base(w, y, y_spy) + hhi_lambda * hhi(w)
 
-    loss.__name__ = f"{name}+{hhi_lambda}*hhi"
+    loss.__name__ = f"loss_{name}"
     return loss

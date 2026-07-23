@@ -13,6 +13,9 @@ class LinearAllocator(Allocator):
     def __init__(self, N, T, cfg):
         super().__init__(N, T, cfg)
         self.fc = nn.Linear(N * T, N)
+        with torch.no_grad():
+            self.fc.weight *= cfg.head_init_scale
+            self.fc.bias *= cfg.head_init_scale
 
     def logits(self, X: torch.Tensor) -> tuple[torch.Tensor, dict]:
         return self.fc(X.flatten(1)), {}

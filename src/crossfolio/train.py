@@ -70,11 +70,11 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None) -
     (run_dir / "config.json").write_text(cfg.dump())
     history = (run_dir / "history.jsonl").open("w")
 
-    def checkpoint(epoch: int, val_sharpe: float) -> None:
+    def checkpoint(epoch: int, val_sharpe: float, name: str = "best.pt") -> None:
         torch.save(
             {"model": model_name, "state_dict": model.state_dict(),
              "epoch": epoch, "val_sharpe": val_sharpe},
-            run_dir / "best.pt",
+            run_dir / name,
         )
 
     max_epochs = 0 if n_params == 0 else cfg.train.max_epochs
@@ -99,6 +99,7 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None) -
 
         vs = eval_sharpe(model, val_dl, device)
         history.write(json.dumps({"epoch": epoch, "val_sharpe": vs}) + "\n")
+        checkpoint(epoch, vs, "last.pt")  # kept for interp: the overfit weights
         if vs > best:
             best, best_epoch = vs, epoch
             checkpoint(epoch, vs)

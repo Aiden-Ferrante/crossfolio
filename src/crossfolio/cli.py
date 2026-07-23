@@ -19,6 +19,9 @@ def main() -> None:
     p_train.add_argument("--loss", default=None, choices=["sharpe", "mean_excess"])
     p_train.add_argument("--stride", type=int, default=None, help="train-anchor stride")
 
+    p_eval = sub.add_parser("evaluate", help="evaluate run dir(s) on the test block")
+    p_eval.add_argument("--compare", nargs="+", required=True, metavar="RUN_DIR")
+
     args = ap.parse_args()
 
     if args.cmd == "build-dataset":
@@ -49,6 +52,12 @@ def main() -> None:
         if args.stride:
             cfg = dataclasses.replace(cfg, train=dataclasses.replace(cfg.train, train_stride=args.stride))
         train(args.model, cfg)
+    elif args.cmd == "evaluate":
+        from pathlib import Path
+
+        from .evaluate import compare
+
+        compare([Path(p) for p in args.compare])
 
 
 if __name__ == "__main__":

@@ -66,6 +66,9 @@ class CrossSectionalAttention(Allocator):
         )
         # the "token embedding": who the stock IS, alongside how it's been moving
         self.id_embed = nn.Embedding(N, d) if cfg.use_id_embed else None
+        if self.id_embed is not None:
+            with torch.no_grad():
+                self.id_embed.weight *= cfg.id_embed_init_scale
         self.blocks = nn.ModuleList(Block(d, cfg.heads) for _ in range(cfg.n_blocks))
         self.ln_out = nn.LayerNorm(d)
         self.head = nn.Linear(d, 1)  # shared across stocks

@@ -448,8 +448,11 @@ def run_stage_d(pretrained_ckpt: Path, seeds: int = 5, out_name: str | None = No
 
 
 def _model_cfg_d(p: PretrainCfg) -> ModelCfg:
+    # zero-init id_embed: faithful to the (embedding-free) pretrained weights,
+    # identity learned gradually; also fine (and fair) for the scratch protocol
     return ModelCfg(d_model=p.d_model, heads=p.heads, enc_hidden=p.enc_hidden,
-                    n_blocks=p.n_blocks, use_id_embed=True, head_init_scale=1e-2)
+                    n_blocks=p.n_blocks, use_id_embed=True,
+                    id_embed_init_scale=0.0, head_init_scale=1e-2)
 
 
 def _stage_d_report(out: Path) -> None:

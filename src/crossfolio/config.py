@@ -43,6 +43,10 @@ class ModelCfg:
     # Off during sim2real pretraining: synthetic stocks have no persistent
     # identity, so an ID embedding is a pure memorization channel.
     use_id_embed: bool = True
+    # Scale on the fresh id_embed init. MUST be 0.0 when loading a checkpoint
+    # pretrained without the embedding: a default N(0,1) embedding added to the
+    # token stream drowns the pretrained representations (found the hard way).
+    id_embed_init_scale: float = 1.0
     # scale on the final head layer's default init; ~1e-2 starts the model at
     # (near) equal weight so it must earn deviations. NOT exact zero: constant
     # logits make Pearson corr 0/0 and can zero the Sharpe std.

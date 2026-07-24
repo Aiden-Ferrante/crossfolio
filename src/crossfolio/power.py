@@ -60,7 +60,8 @@ def _arm_cfg(loss_name: str, seed: int, pretrained: bool = False) -> Cfg:
         # must match the Stage C pretraining architecture (campaign.PretrainCfg);
         # id_embed is fresh (absent from the checkpoint), everything else loads.
         model = ModelCfg(d_model=256, heads=8, enc_hidden=512, n_blocks=4,
-                         use_id_embed=True, head_init_scale=1e-2)
+                         use_id_embed=True, id_embed_init_scale=0.0,
+                         head_init_scale=1e-2)
         lr = 1e-4  # full fine-tune at low lr
     else:
         model = ModelCfg(head_init_scale=1e-2)

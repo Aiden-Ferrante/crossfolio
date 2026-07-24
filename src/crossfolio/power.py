@@ -54,13 +54,22 @@ def _ranks(a: np.ndarray) -> np.ndarray:
     return a.argsort(-1).argsort(-1).astype(np.float64)
 
 
-def _arm_cfg(loss_name: str, seed: int) -> Cfg:
+def _arm_cfg(loss_name: str, seed: int, pretrained: bool = False) -> Cfg:
     ic = loss_name == "ic"
+    if pretrained:
+        # must match the Stage C pretraining architecture (campaign.PretrainCfg);
+        # id_embed is fresh (absent from the checkpoint), everything else loads.
+        model = ModelCfg(d_model=256, heads=8, enc_hidden=512, n_blocks=4,
+                         use_id_embed=True, head_init_scale=1e-2)
+        lr = 1e-4  # full fine-tune at low lr
+    else:
+        model = ModelCfg(head_init_scale=1e-2)
+        lr = 1e-3
     return Cfg(
         data=DataCfg(normalize=False),  # time-axis z-score erases the signal
         loss=LossCfg(name=loss_name, hhi_lambda=0.0 if ic else 0.05),
-        model=ModelCfg(head_init_scale=1e-2),
-        train=TrainCfg(seed=1000 + seed, train_stride=2, max_epochs=80,
+        model=model,
+        train=TrainCfg(seed=1000 + seed, lr=lr, train_stride=2, max_epochs=80,
                        weight_decay=0.0 if ic else 1e-2),
     )
 
@@ -103,13 +112,20 @@ def _eval_test(run_dir: Path, panel: Panel, cfg: Cfg) -> dict:
     }
 
 
-def run_sweep(quick: bool = False) -> Path:
+def run_sweep(quick: bool = False, pretrained: Path | None = None) -> Path:
     gammas = [0, 40] if quick else GAMMAS
     seeds = [0] if quick else SEEDS
     D = D_QUICK if quick else D_FULL
     base = Cfg()
     T, H = base.data.T, base.data.H
-    out = RUNS / f"power-{time.strftime('%Y%m%d-%H%M%S')}{'-quick' if quick else ''}"
+    init_state = None
+    if pretrained is not None:
+        ck = torch.load(pretrained, map_location="cpu", weights_only=False)
+        init_state = ck["ema"]  # EMA weights are the pretrained artifact
+        print(f"B': fine-tuning from {pretrained} (step {ck['step']})")
+    out = RUNS / (f"power-{time.strftime('%Y%m%d-%H%M%S')}"
+                  + ("-pretrained" if pretrained else "")
+                  + ("-quick" if quick else ""))
     out.mkdir(parents=True)
     (out / "POWER.md").write_text(f"# Planted-signal power test\n\n{THRESHOLDS}\n")
     results_f = (out / "results.jsonl").open("w")
@@ -133,13 +149,16 @@ def run_sweep(quick: bool = False) -> Path:
             print(f"[g={gamma:2} s={seed}] oracle IC {orc.mean():+.4f}")
 
             for model_name in MODELS:
+                if pretrained is not None and model_name != "attention":
+                    continue  # the checkpoint is an attention model
                 if seed not in ARM_SEEDS[model_name]:
                     continue
                 for loss_name in LOSSES:
-                    cfg = _arm_cfg(loss_name, seed)
+                    cfg = _arm_cfg(loss_name, seed, pretrained=pretrained is not None)
                     name = f"{out.name}/g{gamma:02d}-s{seed}-{model_name}-{loss_name}"
                     t0 = time.time()
-                    run_dir = train(model_name, cfg, panel, run_name=name)
+                    run_dir = train(model_name, cfg, panel, run_name=name,
+                                    init_state=init_state)
                     row = {"gamma": gamma, "seed": seed, "model": model_name,
                            "loss": loss_name, **_eval_test(run_dir, panel, cfg),
                            "wall_s": round(time.time() - t0, 1)}

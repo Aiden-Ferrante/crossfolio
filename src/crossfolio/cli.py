@@ -24,6 +24,8 @@ def main() -> None:
 
     p_power = sub.add_parser("power", help="planted-signal power test sweep")
     p_power.add_argument("--quick", action="store_true", help="smoke mode: 1 seed, 2 gammas, D=2000")
+    p_power.add_argument("--pretrained", default=None, metavar="CKPT",
+                         help="B': fine-tune each cell from this Stage C checkpoint")
 
     p_camp = sub.add_parser("campaign", help="long-training campaign stages")
     p_camp.add_argument("--stage", required=True, choices=["C"], help="B'/D arrive after C")
@@ -68,9 +70,12 @@ def main() -> None:
 
         compare([Path(p) for p in args.compare])
     elif args.cmd == "power":
+        from pathlib import Path
+
         from .power import run_sweep
 
-        run_sweep(quick=args.quick)
+        run_sweep(quick=args.quick,
+                  pretrained=Path(args.pretrained) if args.pretrained else None)
     elif args.cmd == "campaign":
         from .campaign import run_stage_c
 

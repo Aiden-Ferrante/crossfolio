@@ -56,7 +56,7 @@ def eval_metrics(model, loader, device) -> dict[str, float]:
 
 
 def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
-          run_name: str | None = None) -> Path:
+          run_name: str | None = None, init_state: dict | None = None) -> Path:
     cfg = cfg or Cfg()
     panel = panel or load_panel()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,6 +71,11 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
     val_dl = DataLoader(AnchorDataset(panel, va, cfg.data), shuffle=False, **dl_kw)
 
     model = REGISTRY[model_name](panel.N, cfg.data.T, cfg.model).to(device)
+    if init_state is not None:
+        # pretrained checkpoint: strict=False leaves layers absent from the
+        # checkpoint (e.g. a fresh id_embed) at their fresh init
+        missing, unexpected = model.load_state_dict(init_state, strict=False)
+        assert not unexpected, f"unexpected keys in init_state: {unexpected}"
     loss_fn = make_loss(cfg.loss.name, cfg.loss.hhi_lambda)
     n_params = sum(p.numel() for p in model.parameters())
 

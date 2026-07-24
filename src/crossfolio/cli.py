@@ -36,6 +36,8 @@ def main() -> None:
                         help="stage D: pretrained checkpoint (default: latest campaign-c best)")
     p_camp.add_argument("--seeds", type=int, default=5, help="stage D seeds per cell")
 
+    sub.add_parser("probe", help="interpretability probe suite over the model matrix")
+
     args = ap.parse_args()
 
     if args.cmd == "build-dataset":
@@ -93,6 +95,11 @@ def main() -> None:
             ckpt = Path(args.ckpt) if args.ckpt else \
                 sorted(RUNS.glob("campaign-c-*/ckpt-best.pt"))[-1]
             run_stage_d(ckpt, seeds=args.seeds)
+    elif args.cmd == "probe":
+        from .probes import run_probes
+
+        out = run_probes()
+        print(f"probes -> {out}")
 
 
 if __name__ == "__main__":

@@ -28,10 +28,13 @@ def main() -> None:
                          help="B': fine-tune each cell from this Stage C checkpoint")
 
     p_camp = sub.add_parser("campaign", help="long-training campaign stages")
-    p_camp.add_argument("--stage", required=True, choices=["C"], help="B'/D arrive after C")
-    p_camp.add_argument("--hours", type=float, default=12.0)
+    p_camp.add_argument("--stage", required=True, choices=["C", "D"])
+    p_camp.add_argument("--hours", type=float, default=12.0, help="stage C budget")
     p_camp.add_argument("--resume", default=None,
-                        help="run dir to resume, or 'auto' for the latest")
+                        help="stage C: run dir to resume, or 'auto' for the latest")
+    p_camp.add_argument("--ckpt", default=None,
+                        help="stage D: pretrained checkpoint (default: latest campaign-c best)")
+    p_camp.add_argument("--seeds", type=int, default=5, help="stage D seeds per cell")
 
     args = ap.parse_args()
 
@@ -77,9 +80,19 @@ def main() -> None:
         run_sweep(quick=args.quick,
                   pretrained=Path(args.pretrained) if args.pretrained else None)
     elif args.cmd == "campaign":
-        from .campaign import run_stage_c
+        if args.stage == "C":
+            from .campaign import run_stage_c
 
-        run_stage_c(args.hours, args.resume)
+            run_stage_c(args.hours, args.resume)
+        else:
+            from pathlib import Path
+
+            from .campaign import run_stage_d
+            from .config import RUNS
+
+            ckpt = Path(args.ckpt) if args.ckpt else \
+                sorted(RUNS.glob("campaign-c-*/ckpt-best.pt"))[-1]
+            run_stage_d(ckpt, seeds=args.seeds)
 
 
 if __name__ == "__main__":

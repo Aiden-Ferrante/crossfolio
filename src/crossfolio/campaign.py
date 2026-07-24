@@ -332,3 +332,148 @@ def run_stage_c(hours: float, resume: str | None) -> None:
             + "|---|---|---|" + "---|" * len(p.val_gammas) + "---|\n")
         trainer = Pretrainer(p, run_dir)
     trainer.run(hours)
+
+
+# ---------------------------------------------------------------------------
+# Stage D: walk-forward real-data campaign.
+# 13 yearly folds (2014->2026), expanding train window, purged boundaries;
+# per fold x seed x protocol {scratch, full, head} fine-tune the Stage C
+# architecture on real data, early-stopped on fold-val rank-IC; ensemble =
+# mean logits across seeds. All tensors GPU-resident per fold — no DataLoader.
+# ---------------------------------------------------------------------------
+
+def walkforward_folds(panel, T: int, H: int, start_year: int = 2014):
+    anchors = valid_anchors(panel.D, T, H)
+    adates = panel.dates[anchors]
+    years = adates.astype("datetime64[Y]").astype(int) + 1970
+    folds = []
+    for y in range(start_year, int(years.max()) + 1):
+        test = anchors[years == y]
+        if not len(test):
+            continue
+        trainval = anchors[adates < np.datetime64(f"{y}-01-01")]
+        trainval = trainval[trainval + H < test.min()]          # purge vs test
+        cut = int(len(trainval) * 0.85)
+        tr, va = trainval[:cut], trainval[cut:]
+        tr = tr[tr + H < va.min()]                              # purge vs val
+        assert tr.max() + H < va.min() and va.max() + H < test.min()
+        folds.append((y, tr, va, test))
+    return folds
+
+
+def _rank_ic_t(logits: torch.Tensor, y: torch.Tensor) -> float:
+    return float(rank_ic(logits, y))
+
+
+def _fold_tensors(panel, device, T, H):
+    r = torch.from_numpy(panel.returns).to(device)
+    X, y = _windows_and_targets(r, T, H)
+    return X, y, T - 1  # offset: panel row -> X row
+
+
+def run_stage_d(pretrained_ckpt: Path, seeds: int = 5, out_name: str | None = None) -> Path:
+    from .config import RUNS
+    from .data.dataset import load_panel
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    panel = load_panel()
+    p = PretrainCfg(N=panel.N)
+    T, H = p.T, p.H
+    ck = torch.load(pretrained_ckpt, map_location="cpu", weights_only=False)
+    pre_state = ck["ema"]
+    out = RUNS / (out_name or f"campaign-d-{time.strftime('%Y%m%d-%H%M%S')}")
+    out.mkdir(parents=True)
+    results_f = (out / "results.jsonl").open("w")
+    X_all, y_all, off = _fold_tensors(panel, device, T, H)
+    folds = walkforward_folds(panel, T, H)
+    print(f"stage D: {len(folds)} folds x {seeds} seeds x 3 protocols on {device}")
+
+    for year, tr, va, te in folds:
+        Xtr, ytr = X_all[tr - off], y_all[tr - off]
+        Xva, yva = X_all[va - off], y_all[va - off]
+        Xte, yte = X_all[te - off], y_all[te - off]
+        ens: dict[str, list] = {"scratch": [], "full": [], "head": []}
+        for seed in range(seeds):
+            for proto in ("scratch", "full", "head"):
+                torch.manual_seed(4000 + seed)
+                model = REGISTRY["attention"](panel.N, T, _model_cfg_d(p)).to(device)
+                if proto != "scratch":
+                    model.load_state_dict(pre_state, strict=False)
+                if proto == "head":
+                    for name, q in model.named_parameters():
+                        q.requires_grad_("head" in name or "ln" in name
+                                         or "id_embed" in name)
+                lr = 1e-3 if proto in ("scratch", "head") else 1e-4
+                opt = torch.optim.AdamW(
+                    [q for q in model.parameters() if q.requires_grad], lr=lr)
+                best_ic, best_state, best_ep = -9e9, None, 0
+                for epoch in range(40):
+                    model.train()
+                    order = torch.randperm(len(Xtr), device=device)
+                    for i in range(0, len(order) - 511, 512):
+                        idx = order[i : i + 512]
+                        with torch.autocast(device, dtype=torch.bfloat16,
+                                            enabled=device == "cuda"):
+                            _, aux = model(Xtr[idx])
+                            loss = -mean_ic(aux["logits"].float(), ytr[idx].float())
+                        assert torch.isfinite(loss)
+                        opt.zero_grad(); loss.backward(); opt.step()
+                    model.eval()
+                    with torch.no_grad():
+                        vic = _rank_ic_t(model(Xva)[1]["logits"], yva)
+                    if vic > best_ic:
+                        best_ic, best_ep = vic, epoch
+                        best_state = {k: v.detach().clone()
+                                      for k, v in model.state_dict().items()}
+                    elif epoch - best_ep >= 8:
+                        break
+                model.load_state_dict(best_state)
+                model.eval()
+                with torch.no_grad():
+                    logits_te = model(Xte)[1]["logits"]
+                ens[proto].append(logits_te)
+                row = {"year": year, "seed": seed, "proto": proto,
+                       "val_ic": round(best_ic, 5), "best_epoch": best_ep,
+                       "test_rank_ic": round(_rank_ic_t(logits_te[::H], yte[::H]), 5)}
+                results_f.write(json.dumps(row) + "\n"); results_f.flush()
+        for proto, ls in ens.items():
+            mean_logits = torch.stack(ls).mean(0)
+            row = {"year": year, "seed": "ensemble", "proto": proto,
+                   "test_rank_ic": round(_rank_ic_t(mean_logits[::H], yte[::H]), 5)}
+            results_f.write(json.dumps(row) + "\n"); results_f.flush()
+            print(f"{year} {proto:8} ensemble rank-IC {row['test_rank_ic']:+.4f}")
+    results_f.close()
+    _stage_d_report(out)
+    return out
+
+
+def _model_cfg_d(p: PretrainCfg) -> ModelCfg:
+    return ModelCfg(d_model=p.d_model, heads=p.heads, enc_hidden=p.enc_hidden,
+                    n_blocks=p.n_blocks, use_id_embed=True, head_init_scale=1e-2)
+
+
+def _stage_d_report(out: Path) -> None:
+    rows = [json.loads(l) for l in (out / "results.jsonl").open()]
+    years = sorted({r["year"] for r in rows})
+    lines = ["# Stage D: walk-forward real-data campaign", "",
+             "Ensemble (mean logits across seeds) test rank-IC per year:", "",
+             "| year | scratch | full | head |", "|---|---|---|---|"]
+    agg = {p: [] for p in ("scratch", "full", "head")}
+    for y in years:
+        cells = []
+        for proto in ("scratch", "full", "head"):
+            v = next(r["test_rank_ic"] for r in rows
+                     if r["year"] == y and r["proto"] == proto and r["seed"] == "ensemble")
+            agg[proto].append(v)
+            cells.append(f"{v:+.4f}")
+        lines.append(f"| {y} | " + " | ".join(cells) + " |")
+    lines += ["", "| | mean | 2·SE over years |", "|---|---|---|"]
+    for proto, vs in agg.items():
+        m = float(np.mean(vs))
+        se = float(np.std(vs, ddof=1) / np.sqrt(len(vs)))
+        lines.append(f"| {proto} | {m:+.4f} | ±{2 * se:.4f} |")
+    lines += ["", "Per-anchor rank-IC SE ≈ 0.05/√(~50 weeks/yr) — treat single-year",
+              "cells as noise; the mean row over 13 years is the result. Survivorship",
+              "bias inflates all protocols equally; differences between columns are",
+              "the sim2real claim."]
+    (out / "D_REPORT.md").write_text("\n".join(lines) + "\n")

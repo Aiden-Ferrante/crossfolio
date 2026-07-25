@@ -43,3 +43,38 @@ def test_gradients_flow():
     w.sum().backward()
     grads = [p.grad for p in model.parameters()]
     assert all(g is not None and torch.isfinite(g).all() for g in grads)
+
+
+def test_gated_equals_p7_at_init():
+    cfg = ModelCfg(d_model=16, heads=4, enc_hidden=8, n_blocks=2)
+    torch.manual_seed(0)
+    p7 = REGISTRY["p7_encoder"](N, T, cfg)
+    gated = REGISTRY["gated_attention"](N, T, cfg)
+    gated.load_state_dict(p7.state_dict(), strict=False)  # shared backbone
+    X = torch.randn(B, N, T)
+    with torch.no_grad():
+        lp, _ = p7(X)
+        lg, aux = gated(X)
+    torch.testing.assert_close(lp, lg)                     # gates=0 => exact P7
+    assert torch.all(aux["gates"] == 0)
+
+
+def test_gate_gradients_flow():
+    cfg = ModelCfg(d_model=16, heads=4, enc_hidden=8, n_blocks=2)
+    model = REGISTRY["gated_attention"](N, T, cfg)
+    w, _ = model(torch.randn(B, N, T))
+    w.var().backward()
+    assert all(torch.isfinite(b.gate.grad) for b in model.blocks)
+
+
+def test_p7_has_no_cross_stock_interaction():
+    cfg = ModelCfg(d_model=16, heads=4, enc_hidden=8)
+    model = REGISTRY["p7_encoder"](N, T, cfg).eval()
+    X = torch.randn(1, N, T)
+    X2 = X.clone(); X2[0, 3] += 5.0                       # perturb stock 3 only
+    with torch.no_grad():
+        z1, _ = model.logits(X)
+        z2, _ = model.logits(X2)
+    mask = torch.ones(N, dtype=bool); mask[3] = False
+    torch.testing.assert_close(z1[0, mask], z2[0, mask])   # others unchanged
+    assert not torch.isclose(z1[0, 3], z2[0, 3])

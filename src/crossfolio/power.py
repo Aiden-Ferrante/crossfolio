@@ -21,7 +21,13 @@ from .config import RUNS, Cfg, DataCfg, LossCfg, ModelCfg, TrainCfg
 from .data.dataset import AnchorDataset, Panel
 from .data.splits import purged_split, valid_anchors
 from .models import REGISTRY
-from .synth import cross_sectional_ic, forward_returns, make_panel, make_shocks
+from .synth import (cross_sectional_ic, forward_returns, make_panel,
+                    make_relational_panel, make_shocks)
+
+SIGNALS = {"momentum": (make_panel, [0, 5, 10, 15, 20, 40]),
+           # relational z has a smaller per-bps IC slope (L=20 mates-mean); grid shifted up
+           "relational": (make_relational_panel, [0, 20, 40, 80, 120])}
+ROUND3_ARMS = ["p7_encoder", "attention", "gated_attention"]
 from .train import train
 
 from .universe import N as UNIVERSE_N
@@ -113,8 +119,24 @@ def _eval_test(run_dir: Path, panel: Panel, cfg: Cfg) -> dict:
     }
 
 
-def run_sweep(quick: bool = False, pretrained: Path | None = None) -> Path:
-    gammas = [0, 40] if quick else GAMMAS
+def _p7_oracle_ic(panel, anchors, H: int) -> float:
+    """Best own-window-only ridge (trailing cum returns at 4 lookbacks) —
+    measures the per-stock leak of a relational signal. In-sample fit on the
+    first half of anchors, rank-IC on the second half."""
+    cum = np.cumsum(panel.returns.astype(np.float64), 0)
+    y, _ = forward_returns(panel, anchors, H)
+    feats = np.stack([cum[anchors] - cum[anchors - l] for l in (5, 10, 20, 60)], -1)
+    half = len(anchors) // 2
+    Z = feats[:half].reshape(-1, 4)
+    W = np.linalg.solve(Z.T @ Z + 1e-2 * np.eye(4), Z.T @ y[:half].reshape(-1, 1))
+    pred = (feats[half:].reshape(-1, 4) @ W).reshape(-1, panel.N)
+    return float(cross_sectional_ic(_ranks(pred), _ranks(y[half:])).mean())
+
+
+def run_sweep(quick: bool = False, pretrained: Path | None = None,
+              signal: str = "momentum", arms: str = "classic") -> Path:
+    make, grid = SIGNALS[signal]
+    gammas = [0, grid[-1]] if quick else grid
     seeds = [0] if quick else SEEDS
     D = D_QUICK if quick else D_FULL
     base = Cfg()
@@ -124,7 +146,12 @@ def run_sweep(quick: bool = False, pretrained: Path | None = None) -> Path:
         ck = torch.load(pretrained, map_location="cpu", weights_only=False)
         init_state = ck["ema"]  # EMA weights are the pretrained artifact
         print(f"B': fine-tuning from {pretrained} (step {ck['step']})")
+    models = ROUND3_ARMS if arms == "round3" else MODELS
+    arm_seeds = {m: SEEDS for m in models} if arms == "round3" else ARM_SEEDS
+    losses = ["ic"] if arms == "round3" else LOSSES  # sharpe is starved; round3 is ic-only
     out = RUNS / (f"power-{time.strftime('%Y%m%d-%H%M%S')}"
+                  + (f"-{signal}" if signal != "momentum" else "")
+                  + (f"-{arms}" if arms != "classic" else "")
                   + ("-pretrained" if pretrained else "")
                   + ("-quick" if quick else ""))
     out.mkdir(parents=True)
@@ -136,7 +163,7 @@ def run_sweep(quick: bool = False, pretrained: Path | None = None) -> Path:
     for seed in seeds:
         shocks = make_shocks(D, N, seed)
         for gamma in gammas:
-            panel, meta = make_panel(gamma, shocks)
+            panel, meta = make(gamma, shocks)
             anchors = valid_anchors(panel.D, T, H)
             _, _, test = purged_split(anchors, 0.70, 0.15, H)
             y_orc, _ = forward_returns(panel, test[::H], H)
@@ -148,13 +175,20 @@ def run_sweep(quick: bool = False, pretrained: Path | None = None) -> Path:
             results_f.write(json.dumps(orc_row) + "\n")
             results_f.flush()
             print(f"[g={gamma:2} s={seed}] oracle IC {orc.mean():+.4f}")
+            if signal == "relational":
+                p7row = {"gamma": gamma, "seed": seed, "model": "p7_oracle",
+                         "loss": "-", "test_ic_monthly": _p7_oracle_ic(panel, test[::H], H),
+                         "ic_se": orc_row["ic_se"]}
+                results.append(p7row)
+                results_f.write(json.dumps(p7row) + "\n")
+                print(f"[g={gamma:2} s={seed}] p7-oracle IC {p7row['test_ic_monthly']:+.4f}")
 
-            for model_name in MODELS:
+            for model_name in models:
                 if pretrained is not None and model_name != "attention":
                     continue  # the checkpoint is an attention model
-                if seed not in ARM_SEEDS[model_name]:
+                if seed not in arm_seeds[model_name]:
                     continue
-                for loss_name in LOSSES:
+                for loss_name in losses:
                     cfg = _arm_cfg(loss_name, seed, pretrained=pretrained is not None)
                     name = f"{out.name}/g{gamma:02d}-s{seed}-{model_name}-{loss_name}"
                     t0 = time.time()
@@ -197,11 +231,14 @@ def _plot(results: list[dict], out: Path) -> None:
     g_o, (m_o, lo_o, hi_o) = _agg(results, "oracle", "-")
     ax.plot(g_o, m_o, "k--", lw=2, label="oracle (planted z)")
     ax.fill_between(g_o, lo_o, hi_o, color="k", alpha=0.1)
-    for model in MODELS:
-        for loss in LOSSES:
-            g, (mean, lo, hi) = _agg(results, model, loss)
-            (line,) = ax.plot(g, mean, marker="o", label=f"{model} / {loss}")
-            ax.fill_between(g, lo, hi, color=line.get_color(), alpha=0.15)
+    if any(r["model"] == "p7_oracle" for r in results):
+        g_p, (m_p, _, _) = _agg(results, "p7_oracle", "-")
+        ax.plot(g_p, m_p, color="gray", ls="--", lw=1.5, label="p7-oracle (own-window leak)")
+    for model, loss in sorted({(r["model"], r.get("loss")) for r in results
+                               if r["model"] not in ("oracle", "p7_oracle")}):
+        g, (mean, lo, hi) = _agg(results, model, loss)
+        (line,) = ax.plot(g, mean, marker="o", label=f"{model} / {loss}")
+        ax.fill_between(g, lo, hi, color=line.get_color(), alpha=0.15)
     se = next(r["ic_se"] for r in results if r["model"] != "oracle")
     ax.axhline(2 * se, color="red", ls=":", lw=1, label="detection (2·SE)")
     ax.axhline(0, color="gray", lw=0.5)
@@ -220,8 +257,8 @@ def _report(results: list[dict], out: Path) -> None:
              "| γ (bps) | seed | model | loss | test IC | detected | best epoch | excess Sharpe |",
              "|---|---|---|---|---|---|---|---|"]
     for r in results:
-        if r["model"] == "oracle":
-            lines.append(f"| {r['gamma']} | {r['seed']} | **oracle** | - | "
+        if r["model"] in ("oracle", "p7_oracle"):
+            lines.append(f"| {r['gamma']} | {r['seed']} | **{r['model']}** | - | "
                          f"{r['test_ic_monthly']:+.4f} | - | - | - |")
         else:
             lines.append(
@@ -250,7 +287,9 @@ def _report(results: list[dict], out: Path) -> None:
                 out.append((g, m, 2 * sem, m > 2 * sem and m > 0))
         return out
 
-    arms = [("oracle", "-")] + [(m, l) for m in MODELS for l in LOSSES]
+    arms = [("oracle", "-"), ("p7_oracle", "-")] + sorted(
+        {(r["model"], r.get("loss")) for r in results
+         if r["model"] not in ("oracle", "p7_oracle")})
     for model, loss in arms:
         rows_p = paired(model, loss)
         if not rows_p:

@@ -117,7 +117,10 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
 
         metrics = eval_metrics(model, val_dl, device)
         vs = metrics[stop_on]
-        history.write(json.dumps({"epoch": epoch, **{f"val_{k}": v for k, v in metrics.items()}}) + "\n")
+        rec = {"epoch": epoch, **{f"val_{k}": v for k, v in metrics.items()}}
+        if hasattr(model, "blocks") and hasattr(getattr(model, "blocks")[0], "gate"):
+            rec["gates"] = [round(float(b.gate), 5) for b in model.blocks]
+        history.write(json.dumps(rec) + "\n")
         checkpoint(epoch, vs, "last.pt")  # kept for interp: the overfit weights
         if vs > best:
             best, best_epoch = vs, epoch

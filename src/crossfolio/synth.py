@@ -188,3 +188,43 @@ def make_cocktail_panel(index: int, base_seed: int, N: int, D: int = 1500) -> Pa
         spy=np.log(np.exp(r).mean(axis=1)).astype(np.float32),
         tickers=[f"X{i:03d}" for i in range(N)],
     )
+
+
+def make_relational_panel(gamma_bps: float, shocks: dict, L: int = 20) -> tuple[Panel, dict]:
+    """Purely-relational planted signal: stock i drifts toward its SECTOR-MATES'
+    (excluding self) mean trailing-L return, cross-sectionally z-scored. A
+    per-stock path sees the signal only through the shared sector factor; the
+    two-oracle machinery in power.py measures that leak instead of assuming it
+    away. Same paired-shock discipline as make_panel."""
+    m, beta, sector_id = shocks["m"], shocks["beta"], shocks["sector_id"]
+    base = beta * m[:, None] + shocks["s"][:, sector_id] + shocks["eps"]
+    D, N = base.shape
+    g = gamma_bps * 1e-4 / 21
+    n_sec = sector_id.max() + 1
+    counts = np.bincount(sector_id, minlength=n_sec).astype(np.float64)
+
+    r = np.empty_like(base)
+    cum = np.zeros((D + 1, N))
+    z_anchor = np.full((D, N), np.nan)
+
+    def mates_z(row_hi: int) -> np.ndarray:
+        win = cum[row_hi] - cum[row_hi - L]
+        sec_sum = np.bincount(sector_id, weights=win, minlength=n_sec)
+        mates = (sec_sum[sector_id] - win) / np.maximum(counts[sector_id] - 1, 1)
+        return (mates - mates.mean()) / (mates.std() + 1e-12)
+
+    for t in range(D):
+        r[t] = base[t] + (g * mates_z(t) if (g and t >= L) else 0.0)
+        cum[t + 1] = cum[t] + r[t]
+    for d in range(L - 1, D):
+        z_anchor[d] = mates_z(d + 1)
+
+    tickers = [f"X{i:03d}" for i in range(N)]
+    panel = Panel(
+        dates=np.datetime64("2000-01-03") + np.arange(D),
+        returns=r.astype(np.float32),
+        spy=np.log(np.exp(r).mean(axis=1)).astype(np.float32),
+        tickers=tickers,
+    )
+    return panel, {"gamma_bps": gamma_bps, "seed": shocks["seed"], "z": z_anchor,
+                   "sectors": {t: f"S{s}" for t, s in zip(tickers, sector_id)}}

@@ -26,6 +26,8 @@ def main() -> None:
     p_power.add_argument("--quick", action="store_true", help="smoke mode: 1 seed, 2 gammas, D=2000")
     p_power.add_argument("--pretrained", default=None, metavar="CKPT",
                          help="B': fine-tune each cell from this Stage C checkpoint")
+    p_power.add_argument("--signal", default="momentum", choices=["momentum", "relational"])
+    p_power.add_argument("--arms", default="classic", choices=["classic", "round3"])
 
     p_camp = sub.add_parser("campaign", help="long-training campaign stages")
     p_camp.add_argument("--stage", required=True, choices=["C", "D"])
@@ -80,7 +82,8 @@ def main() -> None:
         from .power import run_sweep
 
         run_sweep(quick=args.quick,
-                  pretrained=Path(args.pretrained) if args.pretrained else None)
+                  pretrained=Path(args.pretrained) if args.pretrained else None,
+                  signal=args.signal, arms=args.arms)
     elif args.cmd == "campaign":
         if args.stage == "C":
             from .campaign import run_stage_c

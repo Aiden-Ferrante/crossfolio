@@ -95,3 +95,23 @@ def test_time_axis_normalization_erases_signal():
     z = meta["z"][d]
     corr = np.corrcoef(win_sums, z)[0, 1]
     assert corr > 0.99  # unnormalized input carries the true signal directly
+
+
+def test_relational_oracle_gap():
+    """Full oracle sees the signal; an own-window-only ridge is far weaker."""
+    from crossfolio.synth import cross_sectional_ic, forward_returns, make_relational_panel
+
+    p, meta = make_relational_panel(120, make_shocks(D, N, seed=5))
+    anchors = valid_anchors(p.D, T, H)[::H]
+    y, _ = forward_returns(p, anchors, H)
+    full = cross_sectional_ic(meta["z"][anchors], y).mean()
+    # own-window features: trailing cum returns at several lookbacks
+    cum = np.cumsum(p.returns.astype(np.float64), 0)
+    feats = np.stack([cum[anchors] - cum[anchors - l] for l in (5, 10, 20, 60)], -1)
+    half = len(anchors) // 2
+    Z = feats[:half].reshape(-1, 4); Yt = y[:half].reshape(-1, 1)
+    W = np.linalg.solve(Z.T @ Z + 1e-2 * np.eye(4), Z.T @ Yt)
+    pred = (feats[half:].reshape(-1, 4) @ W).reshape(len(anchors) - half, N)
+    p7 = cross_sectional_ic(pred, y[half:]).mean()
+    assert full > 0.05                       # relational signal is strong at 120 bps
+    assert p7 < 0.5 * full                   # own-window leak is a minor fraction

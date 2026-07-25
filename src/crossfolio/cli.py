@@ -27,7 +27,7 @@ def main() -> None:
     p_power.add_argument("--pretrained", default=None, metavar="CKPT",
                          help="B': fine-tune each cell from this Stage C checkpoint")
     p_power.add_argument("--signal", default="momentum", choices=["momentum", "relational"])
-    p_power.add_argument("--arms", default="classic", choices=["classic", "round3"])
+    p_power.add_argument("--arms", default="classic", choices=["classic", "round3", "round4"])
 
     p_camp = sub.add_parser("campaign", help="long-training campaign stages")
     p_camp.add_argument("--stage", required=True, choices=["C", "D"])

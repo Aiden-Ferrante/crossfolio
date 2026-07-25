@@ -56,7 +56,8 @@ def eval_metrics(model, loader, device) -> dict[str, float]:
 
 
 def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
-          run_name: str | None = None, init_state: dict | None = None) -> Path:
+          run_name: str | None = None, init_state: dict | None = None,
+          curriculum_panels: list[Panel] | None = None) -> Path:
     cfg = cfg or Cfg()
     panel = panel or load_panel()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -66,8 +67,12 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
     tr, va, _ = purged_split(anchors, cfg.split.train_frac, cfg.split.val_frac, cfg.data.H)
     tr = tr[:: cfg.train.train_stride]
     dl_kw = dict(batch_size=cfg.train.batch_size, num_workers=0)
-    train_dl = DataLoader(AnchorDataset(panel, tr, cfg.data), shuffle=True,
-                          drop_last=True, generator=g, **dl_kw)
+    # curriculum: train on a gamma-ladder of paired panels (strong -> target),
+    # switching every 15 epochs; val/eval always on the target panel's split.
+    ladder = (curriculum_panels or []) + [panel]
+    train_dls = [DataLoader(AnchorDataset(lp, tr, cfg.data), shuffle=True,
+                            drop_last=True, generator=g, **dl_kw) for lp in ladder]
+    train_dl = train_dls[-1]
     val_dl = DataLoader(AnchorDataset(panel, va, cfg.data), shuffle=False, **dl_kw)
 
     model = REGISTRY[model_name](panel.N, cfg.data.T, cfg.model).to(device)
@@ -105,6 +110,7 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr,
                             weight_decay=cfg.train.weight_decay) if max_epochs else None
     for epoch in range(1, max_epochs + 1):
+        train_dl = train_dls[min((epoch - 1) // 15, len(train_dls) - 1)]
         model.train()
         for X, y, y_spy in train_dl:
             X, y, y_spy = X.to(device), y.to(device), y_spy.to(device)
@@ -120,6 +126,8 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
         rec = {"epoch": epoch, **{f"val_{k}": v for k, v in metrics.items()}}
         if hasattr(model, "blocks") and hasattr(getattr(model, "blocks")[0], "gate"):
             rec["gates"] = [round(float(b.gate), 5) for b in model.blocks]
+        if hasattr(model, "lambdas"):
+            rec["lambdas"] = [[round(float(v), 5) for v in l] for l in model.lambdas]
         history.write(json.dumps(rec) + "\n")
         checkpoint(epoch, vs, "last.pt")  # kept for interp: the overfit weights
         if vs > best:

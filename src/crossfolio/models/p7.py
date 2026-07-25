@@ -69,3 +69,40 @@ class GatedCrossSectional(_Backbone):
         return self._finish(x), {
             "attn": attn, "gates": torch.stack([b.gate for b in self.blocks]),
         }
+
+
+class CorrBiasAttention(GatedCrossSectional):
+    """Gated attention with a relational inductive bias: attention logits get
+    lambda_h * B added pre-softmax, where B_ij = corr(window_i, window_j) is
+    computed per anchor from the RAW input windows. lambda per (block, head)
+    init 0 — a second zero-init dial steering WHERE to attend. At init this is
+    exactly the P7 baseline (gate=0, lambda=0)."""
+
+    def __init__(self, N, T, cfg):
+        super().__init__(N, T, cfg)
+        self.lambdas = nn.ParameterList(
+            nn.Parameter(torch.zeros(cfg.heads)) for _ in self.blocks
+        )
+        # dL/dlambda is proportional to the gate: both dials at 0 would
+        # deadlock (lambda can't learn while the gate is shut). Small nonzero
+        # gate keeps both gradients alive; init-equivalence becomes approximate.
+        with torch.no_grad():
+            for b in self.blocks:
+                b.gate.fill_(0.1)
+
+    def logits(self, X: torch.Tensor) -> tuple[torch.Tensor, dict]:
+        Xc = X - X.mean(-1, keepdim=True)
+        Xn = Xc / (Xc.norm(dim=-1, keepdim=True) + 1e-8)
+        B_corr = Xn @ Xn.transpose(-2, -1)              # (B, N, N)
+        x = self.encoder(X)
+        attn = None
+        for blk, lam in zip(self.blocks, self.lambdas):
+            blk.mhsa.attn_bias = lam.view(1, -1, 1, 1) * B_corr.unsqueeze(1)
+            a, attn = blk.mhsa(blk.ln(x))
+            blk.mhsa.attn_bias = None
+            x = x + blk.gate * a
+        return self._finish(x), {
+            "attn": attn,
+            "gates": torch.stack([b.gate for b in self.blocks]),
+            "lambdas": torch.stack([l.detach().clone() for l in self.lambdas]),
+        }

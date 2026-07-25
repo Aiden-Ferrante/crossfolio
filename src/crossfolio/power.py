@@ -28,6 +28,8 @@ SIGNALS = {"momentum": (make_panel, [0, 5, 10, 15, 20, 40]),
            # relational z has a smaller per-bps IC slope (L=20 mates-mean); grid shifted up
            "relational": (make_relational_panel, [0, 20, 40, 80, 120])}
 ROUND3_ARMS = ["p7_encoder", "attention", "gated_attention"]
+ROUND4_ARMS = ["p7_encoder", "gated_attention", "corr_bias_attention", "gated_curriculum"]
+CURRICULUM_LADDER = (500.0, 250.0, 120.0)  # bps, strong -> weaker, then the target panel
 from .train import train
 
 from .universe import N as UNIVERSE_N
@@ -146,9 +148,9 @@ def run_sweep(quick: bool = False, pretrained: Path | None = None,
         ck = torch.load(pretrained, map_location="cpu", weights_only=False)
         init_state = ck["ema"]  # EMA weights are the pretrained artifact
         print(f"B': fine-tuning from {pretrained} (step {ck['step']})")
-    models = ROUND3_ARMS if arms == "round3" else MODELS
-    arm_seeds = {m: SEEDS for m in models} if arms == "round3" else ARM_SEEDS
-    losses = ["ic"] if arms == "round3" else LOSSES  # sharpe is starved; round3 is ic-only
+    models = {"round3": ROUND3_ARMS, "round4": ROUND4_ARMS}.get(arms, MODELS)
+    arm_seeds = {m: SEEDS for m in models} if arms != "classic" else ARM_SEEDS
+    losses = ["ic"] if arms != "classic" else LOSSES  # sharpe is starved; rounds are ic-only
     out = RUNS / (f"power-{time.strftime('%Y%m%d-%H%M%S')}"
                   + (f"-{signal}" if signal != "momentum" else "")
                   + (f"-{arms}" if arms != "classic" else "")
@@ -190,10 +192,15 @@ def run_sweep(quick: bool = False, pretrained: Path | None = None,
                     continue
                 for loss_name in losses:
                     cfg = _arm_cfg(loss_name, seed, pretrained=pretrained is not None)
-                    name = f"{out.name}/g{gamma:02d}-s{seed}-{model_name}-{loss_name}"
+                    name = f"{out.name}/g{gamma:03d}-s{seed}-{model_name}-{loss_name}"
                     t0 = time.time()
-                    run_dir = train(model_name, cfg, panel, run_name=name,
-                                    init_state=init_state)
+                    real_model = model_name
+                    ladder = None
+                    if model_name == "gated_curriculum":
+                        real_model = "gated_attention"
+                        ladder = [make(gl, shocks)[0] for gl in CURRICULUM_LADDER]
+                    run_dir = train(real_model, cfg, panel, run_name=name,
+                                    init_state=init_state, curriculum_panels=ladder)
                     row = {"gamma": gamma, "seed": seed, "model": model_name,
                            "loss": loss_name, **_eval_test(run_dir, panel, cfg),
                            "wall_s": round(time.time() - t0, 1)}

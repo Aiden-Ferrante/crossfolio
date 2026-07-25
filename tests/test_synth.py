@@ -115,3 +115,13 @@ def test_relational_oracle_gap():
     p7 = cross_sectional_ic(pred, y[half:]).mean()
     assert full > 0.05                       # relational signal is strong at 120 bps
     assert p7 < 0.5 * full                   # own-window leak is a minor fraction
+
+
+def test_curriculum_ladder_is_paired():
+    from crossfolio.synth import make_relational_panel
+
+    sh = make_shocks(400, N, seed=9)
+    p_hi, _ = make_relational_panel(500, sh)
+    p_lo, _ = make_relational_panel(120, sh)
+    diff = np.abs(p_hi.returns - p_lo.returns)
+    assert diff.max() > 0 and diff.max() < 0.05  # same shocks, drift-scale only

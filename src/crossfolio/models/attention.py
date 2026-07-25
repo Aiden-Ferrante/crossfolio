@@ -35,7 +35,11 @@ class MultiHeadSelfAttention(nn.Module):
         q, k, v = (
             t.view(B, S, self.heads, self.dk).transpose(1, 2) for t in (q, k, v)
         )
-        attn = torch.softmax(q @ k.transpose(-2, -1) / self.dk**0.5, dim=-1)  # (B, h, S, S)
+        logits = q @ k.transpose(-2, -1) / self.dk**0.5
+        bias = getattr(self, "attn_bias", None)  # set per-forward by CorrBiasAttention
+        if bias is not None:
+            logits = logits + bias
+        attn = torch.softmax(logits, dim=-1)  # (B, h, S, S)
         # interp patching hooks (set as attributes by probes.py, absent otherwise):
         if getattr(self, "patch_uniform", False):
             attn = torch.full_like(attn, 1.0 / S)

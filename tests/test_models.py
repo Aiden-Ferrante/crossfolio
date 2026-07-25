@@ -78,3 +78,23 @@ def test_p7_has_no_cross_stock_interaction():
     mask = torch.ones(N, dtype=bool); mask[3] = False
     torch.testing.assert_close(z1[0, mask], z2[0, mask])   # others unchanged
     assert not torch.isclose(z1[0, 3], z2[0, 3])
+
+
+def test_round4_dials_at_init():
+    cfg = ModelCfg(d_model=16, heads=4, enc_hidden=8, n_blocks=2)
+    torch.manual_seed(0)
+    p7 = REGISTRY["p7_encoder"](N, T, cfg)
+    cb = REGISTRY["corr_bias_attention"](N, T, cfg)
+    cb.load_state_dict(p7.state_dict(), strict=False)
+    X = torch.randn(B, N, T)
+    with torch.no_grad():
+        lp, _ = p7(X)
+        lc, aux = cb(X)
+    # gate=0.1 (deadlock fix) => approximate, not exact, P7 equivalence
+    assert torch.allclose(lp, lc, atol=0.2)
+    assert torch.all(aux["lambdas"] == 0)
+    # lambda gradients flow even at lambda=0 (because gate != 0)
+    w, _ = cb(X)
+    w.var().backward()
+    assert all(torch.isfinite(l.grad).all() and l.grad.abs().sum() > 0
+               for l in cb.lambdas)

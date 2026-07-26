@@ -60,14 +60,25 @@ def rank_ic(logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return mean_ic(rl, ry)
 
 
+def kl_to_ew(w: torch.Tensor) -> torch.Tensor:
+    """KL(w || uniform) = log N + sum w log w, mean over batch. The Bregman
+    divergence native to the simplex (Round 6 A1)."""
+    N = w.shape[-1]
+    return (torch.log(torch.tensor(float(N), device=w.device))
+            + (w * torch.log(w + 1e-12)).sum(-1)).mean()
+
+
 def make_loss(name: str, hhi_lambda: float):
     """sharpe | mean_excess grade the portfolio scalar (1 outcome/anchor);
     ic grades the cross-section (N outcomes/anchor — densified supervision).
     The HHI penalty applies only to portfolio losses: scale-invariant corr
     doesn't care about the one direction HHI pushes on, they'd only fight."""
-    if name == "ic":
+    if name in ("ic", "ic_hhi", "ic_kl"):
+        pen = {"ic": None, "ic_hhi": hhi, "ic_kl": kl_to_ew}[name]
+
         def loss(w, y, y_spy, logits) -> torch.Tensor:
-            return -mean_ic(logits, y)
+            base = -mean_ic(logits, y)
+            return base + 0.05 * pen(w) if pen is not None else base
     else:
         base = {"sharpe": neg_batch_sharpe, "mean_excess": neg_mean_excess}[name]
 

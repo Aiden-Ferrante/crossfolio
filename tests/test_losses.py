@@ -85,3 +85,18 @@ def test_mean_ic_matches_numpy():
         np.corrcoef(logits[i].numpy(), y[i].numpy())[0, 1] for i in range(8)
     ])
     assert abs(float(mean_ic(logits, y)) - expected) < 1e-5
+
+
+def test_kl_to_ew_direction():
+    from crossfolio.losses import kl_to_ew
+
+    N = 8
+    w_flat = torch.full((4, N), 1 / N)
+    w_conc = torch.nn.functional.one_hot(torch.zeros(4, dtype=torch.long), N).float()
+    w_conc = w_conc * 0.99 + 0.01 / N
+    assert float(kl_to_ew(w_flat)) < 1e-5
+    assert float(kl_to_ew(w_conc)) > 1.0
+    # penalized loss prefers flat over concentrated when returns are identical
+    loss = make_loss("ic_kl", 0.0)
+    y = torch.randn(4, N); spy = torch.zeros(4); lg = torch.randn(4, N)
+    assert loss(w_flat, y, spy, lg) < loss(w_conc, y, spy, lg)

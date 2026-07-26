@@ -98,7 +98,7 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
 
     # stop on the metric the loss can actually move — stopping the IC arm on
     # val Sharpe would select on mismatched noise and recreate the epoch-0 bug
-    stop_on = "ic" if cfg.loss.name == "ic" else "sharpe"
+    stop_on = "ic" if cfg.loss.name.startswith("ic") else "sharpe"
     max_epochs = 0 if n_params == 0 else cfg.train.max_epochs
     metrics = eval_metrics(model, val_dl, device)
     best, best_epoch = metrics[stop_on], 0

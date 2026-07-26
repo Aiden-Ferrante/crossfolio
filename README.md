@@ -98,3 +98,14 @@ any real-data result.
 See [ARCHITECTURE.md](ARCHITECTURE.md). One-line version: `config ← data ←
 {models, losses} ← train ← evaluate/plots ← cli`; only `data/build.py` touches
 the lake; only `train.py`/`evaluate.py` write `runs/`.
+
+## Round 5: is there an actual edge? (docs/edge/)
+
+Under pre-registered discipline (untouched 2-year holdout evaluated once, all
+trials ledgered, net-of-costs only): the champion (p7 encoder + position
+smoothing) met the registered thresholds — holdout net excess Sharpe +0.94 at
+10 bps costs — but at t=1.35 over 25 months the evidence is **suggestive, not
+significant**, and the development claim deflates past significance under the
+trial-count haircut. Verdict: no demonstrated edge; a paper-tracked frozen
+champion is the registered path to a real answer. Not investment advice; not a
+basis for deploying money.

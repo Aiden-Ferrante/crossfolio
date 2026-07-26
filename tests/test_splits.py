@@ -45,3 +45,17 @@ def test_degenerate_split_fails_loud():
     a = valid_anchors(40, T, H)  # too small: purge eats a whole block
     with pytest.raises(AssertionError):
         purged_split(a, 0.70, 0.15, horizon=20)
+
+
+def test_holdout_wall():
+    """Round 5: dev_panel cannot reach holdout returns, even through grading."""
+    import numpy as np
+    from crossfolio.config import Cfg
+    from crossfolio.edge import HOLDOUT_START, dev_panel
+
+    p = dev_panel()
+    cfg = Cfg()
+    last_gradable = p.dates[-1] + np.timedelta64(2 * cfg.data.H, "D")  # calendar upper bound
+    assert p.dates[-1] < HOLDOUT_START
+    # even the last row's forward window (trading days < 2x calendar) ends pre-holdout
+    assert np.datetime64(p.dates[-1]) + np.timedelta64(cfg.data.H * 2, "D") <= HOLDOUT_START + np.timedelta64(7, "D")

@@ -1,0 +1,11 @@
+{"ts": "2026-07-26 00:08:04", "candidate": "p7_base", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.256, "net@5.0bps": 0.257, "net@20.0bps": 0.254, "weekly_turnover": 0.002, "n_months": 79}
+{"ts": "2026-07-26 00:08:04", "candidate": "p7_base", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.257, "net@5.0bps": 0.257, "net@20.0bps": 0.257, "weekly_turnover": 0.0, "n_months": 79}
+{"ts": "2026-07-26 00:08:56", "candidate": "p7_big", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.255, "net@5.0bps": 0.256, "net@20.0bps": 0.251, "weekly_turnover": 0.004, "n_months": 79}
+{"ts": "2026-07-26 00:08:56", "candidate": "p7_big", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.258, "net@5.0bps": 0.258, "net@20.0bps": 0.257, "weekly_turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 00:09:11", "candidate": "p7_reversal", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.257, "net@5.0bps": 0.257, "net@20.0bps": 0.256, "weekly_turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 00:09:11", "candidate": "p7_reversal", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.257, "net@5.0bps": 0.257, "net@20.0bps": 0.257, "weekly_turnover": 0.0, "n_months": 79}
+{"ts": "2026-07-26 00:17:24", "candidate": "corr_bias", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.256, "net@5.0bps": 0.256, "net@20.0bps": 0.254, "weekly_turnover": 0.002, "n_months": 79}
+{"ts": "2026-07-26 00:17:24", "candidate": "corr_bias", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.257, "net@5.0bps": 0.257, "net@20.0bps": 0.257, "weekly_turnover": 0.0, "n_months": 79}
+{"ts": "2026-07-26 00:18:12", "candidate": "p7_stride1", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.257, "net@5.0bps": 0.258, "net@20.0bps": 0.255, "weekly_turnover": 0.003, "n_months": 79}
+{"ts": "2026-07-26 00:18:12", "candidate": "p7_stride1", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.259, "net@5.0bps": 0.259, "net@20.0bps": 0.258, "weekly_turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 00:18:57", "note": "AMENDMENT: v1 batch invalid \u2014 graded vs SPY (not prereg EW benchmark) and unstandardized logits gave near-uniform weights; all v1 rows measured EW-vs-SPY, not skill. v2 = EW benchmark + per-anchor logit standardization. v1 rows retained above for the ledger record."}

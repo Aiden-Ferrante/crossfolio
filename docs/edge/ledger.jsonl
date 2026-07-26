@@ -37,3 +37,33 @@
 {"ts": "2026-07-26 00:50:53", "eval": "v2", "candidate": "corr_bias", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.627, "net@5.0bps": 0.679, "net@20.0bps": 0.521, "weekly_turnover": 0.333, "n_months": 79}
 {"ts": "2026-07-26 00:51:42", "eval": "v2", "candidate": "p7_stride1", "smooth_alpha": 1.0, "seeds": 5, "net_sharpe@10bps": 0.203, "net@5.0bps": 0.273, "net@20.0bps": 0.063, "weekly_turnover": 1.296, "n_months": 79}
 {"ts": "2026-07-26 00:51:42", "eval": "v2", "candidate": "p7_stride1", "smooth_alpha": 0.3, "seeds": 5, "net_sharpe@10bps": 0.616, "net@5.0bps": 0.652, "net@20.0bps": 0.544, "weekly_turnover": 0.334, "n_months": 79}
+{"ts": "2026-07-26 09:49:08", "round": 6, "arm": "spt_p0.5", "net_sharpe@10bps": -0.065, "turnover": 0.012, "n_months": 79}
+{"ts": "2026-07-26 09:49:08", "round": 6, "arm": "spt_p-0.5", "net_sharpe@10bps": 0.324, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 09:49:08", "round": 6, "arm": "eg_eta0.05", "net_sharpe@10bps": -0.331, "turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 09:49:08", "round": 6, "arm": "eg_eta0.5", "net_sharpe@10bps": -0.23, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 09:49:43", "round": 6, "arm": "ic_lam0_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 09:50:17", "round": 6, "arm": "ic_hhi_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 09:50:52", "round": 6, "arm": "ic_kl_adam", "net_sharpe@10bps": 0.618, "turnover": 0.325, "n_months": 79}
+{"ts": "2026-07-26 09:51:21", "round": 6, "arm": "ic_lam0_sgd", "net_sharpe@10bps": 0.515, "turnover": 0.288, "n_months": 79}
+{"ts": "2026-07-26 09:51:47", "round": 6, "arm": "ic_lam0_rmsprop", "net_sharpe@10bps": 0.564, "turnover": 0.321, "n_months": 79}
+{"ts": "2026-07-26 09:52:00", "round": 6, "arm": "spt_p0.5", "net_sharpe@10bps": -0.065, "turnover": 0.012, "n_months": 79}
+{"ts": "2026-07-26 09:52:00", "round": 6, "arm": "spt_p-0.5", "net_sharpe@10bps": 0.324, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 09:52:00", "round": 6, "arm": "eg_eta0.05", "net_sharpe@10bps": -0.331, "turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 09:52:00", "round": 6, "arm": "eg_eta0.5", "net_sharpe@10bps": -0.23, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 09:52:33", "round": 6, "arm": "ic_lam0_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 09:53:06", "round": 6, "arm": "ic_hhi_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 09:53:39", "round": 6, "arm": "ic_kl_adam", "net_sharpe@10bps": 0.618, "turnover": 0.325, "n_months": 79}
+{"ts": "2026-07-26 09:54:08", "round": 6, "arm": "ic_lam0_sgd", "net_sharpe@10bps": 0.515, "turnover": 0.288, "n_months": 79}
+{"ts": "2026-07-26 09:54:35", "round": 6, "arm": "ic_lam0_rmsprop", "net_sharpe@10bps": 0.564, "turnover": 0.321, "n_months": 79}
+{"ts": "2026-07-26 10:14:10", "round": 6, "arm": "p7_regime", "net_sharpe@10bps": 0.856, "turnover": 0.312, "n_months": 79}
+{"ts": "2026-07-26 10:20:11", "round": 6, "arm": "gated_regime", "net_sharpe@10bps": 0.812, "turnover": 0.314, "n_months": 79}
+{"ts": "2026-07-26 10:21:10", "round": 6, "arm": "spt_p0.5", "net_sharpe@10bps": -0.065, "turnover": 0.012, "n_months": 79}
+{"ts": "2026-07-26 10:21:10", "round": 6, "arm": "spt_p-0.5", "net_sharpe@10bps": 0.324, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 10:21:10", "round": 6, "arm": "eg_eta0.05", "net_sharpe@10bps": -0.331, "turnover": 0.001, "n_months": 79}
+{"ts": "2026-07-26 10:21:10", "round": 6, "arm": "eg_eta0.5", "net_sharpe@10bps": -0.23, "turnover": 0.013, "n_months": 79}
+{"ts": "2026-07-26 10:21:42", "round": 6, "arm": "ic_lam0_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 10:22:14", "round": 6, "arm": "ic_hhi_adam", "net_sharpe@10bps": 0.618, "turnover": 0.327, "n_months": 79}
+{"ts": "2026-07-26 10:22:47", "round": 6, "arm": "ic_kl_adam", "net_sharpe@10bps": 0.618, "turnover": 0.325, "n_months": 79}
+{"ts": "2026-07-26 10:23:15", "round": 6, "arm": "ic_lam0_sgd", "net_sharpe@10bps": 0.515, "turnover": 0.288, "n_months": 79}
+{"ts": "2026-07-26 10:23:40", "round": 6, "arm": "ic_lam0_rmsprop", "net_sharpe@10bps": 0.564, "turnover": 0.321, "n_months": 79}
+{"ts": "2026-07-26 10:51:49", "round": 6, "arm": "HOLDOUT_p7_regime", "net@5bps": 0.795, "net@10bps": 0.724, "net@20bps": 0.582, "t_stat": 1.04, "n_months": 25}

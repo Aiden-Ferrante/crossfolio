@@ -38,3 +38,9 @@ sealed and the verdict rests on dev evidence + the paper-track.
   compute regime sensitivity; this hands them the canonical coordinate.
 
 All dev comparisons: identical walk-forward (2018+, 5 seeds), ledger v3 rows.
+
+## Phase 5 gate decision (written before the holdout run)
+p7_regime dev net +0.856 >= gate (+0.77). Champion for the single holdout
+shot: **p7_regime** (T+1 input, regime scalar appended). gated_regime (+0.812)
+also cleared but p7_regime is simpler and higher. This is Round 6's one and
+only holdout evaluation; ledger records it either way.

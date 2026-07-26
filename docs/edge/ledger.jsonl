@@ -67,3 +67,14 @@
 {"ts": "2026-07-26 10:23:15", "round": 6, "arm": "ic_lam0_sgd", "net_sharpe@10bps": 0.515, "turnover": 0.288, "n_months": 79}
 {"ts": "2026-07-26 10:23:40", "round": 6, "arm": "ic_lam0_rmsprop", "net_sharpe@10bps": 0.564, "turnover": 0.321, "n_months": 79}
 {"ts": "2026-07-26 10:51:49", "round": 6, "arm": "HOLDOUT_p7_regime", "net@5bps": 0.795, "net@10bps": 0.724, "net@20bps": 0.582, "t_stat": 1.04, "n_months": 25}
+{"ts": "2026-07-26 11:31:43", "round": 7, "phase": "design-review-diagnostic", "note": "Measured on dev_panel 2018+ (329 weekly anchors) during design review, BEFORE prereg. Logged per no-ledger-entry-no-result rule; makes R7 B0-B3 confirmatory, not exploratory."}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B0_plain_reversal", "metric": "mean_anchor_rank_IC", "value": 0.0342, "t": 3.06}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "peer5_alone", "metric": "mean_anchor_rank_IC", "value": -0.0333, "t": -2.38, "note": "WRONG SIGN vs hypothesis"}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "peer5_orth_own", "metric": "mean_anchor_rank_IC", "value": -0.02, "t": -1.79}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B1_peer_lag", "metric": "mean_anchor_rank_IC", "value": 0.0177, "t": 3.07, "paired_vs_B0": -0.0165, "paired_t": -2.03}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B2_plus_resilience", "metric": "mean_anchor_rank_IC", "value": 0.0173, "paired_vs_B1": -0.0004, "paired_t": -0.55}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B3_plus_stability", "metric": "mean_anchor_rank_IC", "value": 0.0169, "paired_vs_B2": -0.0004, "paired_t": -0.59}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "interaction_test", "note": "rev x RESILIENCE beta=-0.0016 t=-0.45 (wrong sign); rev x STABILITY beta=+0.0048 t=+1.35 (ns). Neither gate moderates reversal."}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B0_softmax_a0.3", "net_sharpe@10bps": 0.737, "turnover": 0.336, "note": "PLAIN 5d REVERSAL, zero params \u2014 ABOVE incumbent p7_base +0.624"}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B0_rankmap_a0.3", "net_sharpe@10bps": 0.913, "turnover": 0.289, "note": "rank-map construction; above R6 champion p7_regime +0.856. NEEDS INDEPENDENT CONFIRMATION."}
+{"ts": "2026-07-26 11:31:43", "round": 7, "arm": "B0_unsmoothed", "net_sharpe@10bps": 0.263, "turnover": 1.302, "note": "cost drag eats 83% of gross; smoothing helps rather than attenuates"}

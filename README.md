@@ -35,11 +35,15 @@ uv run crossfolio evaluate --compare runs/<eq> runs/<linear> runs/<attention>
 uv run pytest                            # leakage tests are the correctness core
 ```
 
-Data comes from the local [stocklake](../stocklake) lake (keyless, yfinance-fed).
-The frozen 120-name universe is committed in `src/crossfolio/universe.py`,
-generated once by `scripts/freeze_universe.py` (re-run only deliberately —
-it redefines the panel). Refresh the lake first:
-`cd ../stocklake && .venv/bin/python -m stocklake ingest --tickers <universe> SPY`.
+**On reproducibility:** the price panel is *not* included — `data/` and `runs/`
+are gitignored, and the daily bars come from `stocklake`, a separate (private,
+keyless, yfinance-fed) local lake of mine. What *is* committed is everything
+needed to check the reasoning rather than re-run it: the frozen 120-name
+universe (`src/crossfolio/universe.py`, generated once by
+`scripts/freeze_universe.py`), the pre-registrations, the full trial ledger,
+and every results file behind the tables below. Substituting any daily
+adjusted-close source for the same tickers reproduces the panel;
+`build-dataset` is the only code that touches the lake.
 
 ## The correctness core
 

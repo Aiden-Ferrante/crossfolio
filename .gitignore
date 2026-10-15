@@ -4,3 +4,6 @@ __pycache__/
 *.egg-info/
 /data/
 /runs/
+.env
+.env.*
+!.env.example

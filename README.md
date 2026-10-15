@@ -1,5 +1,56 @@
 # crossfolio
 
+A pre-registered neural portfolio allocator for a 405-stock universe, graded on
+chronological purged splits with an untouched 2-year holdout and every trial
+ledgered.
+
+**Result:** honest negative. The best holdout was +0.94 net excess Sharpe @10bps
+at t = 1.35 over 25 months — not significant (`docs/edge/VERDICT.md`). And a
+zero-parameter 5-day reversal baseline (+0.913 net on dev) beat the best learned
+arm (+0.856) (`docs/edge/ledger.jsonl`, round 7 vs round 6).
+
+## Quickstart
+
+```bash
+uv sync          # torch comes from the cu130 index (see pyproject)
+uv run pytest    # leakage tests, synthetic power harness: 48 pass, 1 skip on a fresh clone
+```
+
+The skip is the holdout-wall test, which needs `data/panel.npz`. The panel is
+**not** in the repo: it is built from `stocklake`, a private local price lake of
+mine (yfinance-fed per-ticker parquet), which stays private. To use your own
+data, write one parquet per ticker in `src/crossfolio/universe.py` plus SPY,
+with columns `date, ticker, adj_close`, point `LAKE` in
+`src/crossfolio/config.py` at that folder, then run
+`uv run crossfolio build-dataset`. `data/build.py` is the only code that reads
+the lake. The `deploy/` unit and `scripts/freeze_universe.py` assume my local
+`~/Desktop/code/` layout and are kept as a record, not as something to run.
+
+With a panel in place:
+
+```bash
+uv run crossfolio build-dataset          # lake parquet -> data/panel.npz
+uv run crossfolio inspect                # panel + purged split summary
+uv run crossfolio stage0                 # the original idea, both losses side by side
+uv run crossfolio train --model attention
+uv run crossfolio evaluate --compare runs/<eq> runs/<linear> runs/<attention>
+```
+
+## What went wrong / what I learned
+
+- **No demonstrated edge.** Round 5 met its registered thresholds, but the dev
+  claim deflates past significance under the ledger's 10-trial Bonferroni, and
+  Round 6's "better" regime feature came back lower on the holdout (+0.72).
+- **A free baseline beat the models.** Plain 5-day reversal, zero parameters,
+  out-scored every learned arm; it is a single unconfirmed run, disclosed as such.
+- **Attention hurt.** Flattening it to uniform improved detection
+  (`docs/probes/PROBES.md`), and pretraining tied scratch (`docs/campaign/D_REPORT.md`).
+- **A grading bug was caught and kept.** v1 graded against SPY instead of the
+  pre-registered equal-weight benchmark; it was ledgered as an amendment and the
+  invalid rows were kept, not deleted.
+
+## Design
+
 A neural portfolio allocator built as a learning instrument: the network outputs
 an **allocation** (softmax over the 405-name universe); **alpha is the grade, not
 the output** — the loss computes it from the allocation and the next 5 trading
@@ -30,31 +81,10 @@ generate returns. Every arm runs on a **shared harness** — same data, same
 purged splits, same loss — and is adjudicated by internal evidence (do
 attention heads recover sector structure?) rather than leaderboard Sharpe.
 
-## Quickstart
-
-```bash
-uv sync                                  # torch comes from the cu130 index (see pyproject)
-uv run crossfolio build-dataset          # reads the stocklake parquet -> data/panel.npz
-uv run crossfolio inspect                # panel + purged split summary
-uv run crossfolio stage0                 # the original idea, both losses side by side
-uv run crossfolio train --model linear
-uv run crossfolio train --model attention
-uv run crossfolio evaluate --compare runs/<eq> runs/<linear> runs/<attention>
-uv run pytest                            # leakage tests are the correctness core
-```
-
-**On reproducibility:** the price panel is *not* included — `data/` and `runs/`
-are gitignored, and the daily bars come from `stocklake`, a separate (private,
-keyless, yfinance-fed) local lake of mine. What *is* committed is everything
-needed to check the reasoning rather than re-run it: the frozen 405-name
-universe (`src/crossfolio/universe.py`, generated once by
-`scripts/freeze_universe.py`), the pre-registrations, the full 80-row trial
-ledger, and the results files behind the tables below. Substituting any daily
-adjusted-close source for the same tickers reproduces the panel;
-`build-dataset` is the only code that touches the lake.
-
-Note that per-run artifacts in `runs/` are **not** kept, so tables here cite
-the committed reports under `docs/`, which are the durable record.
+What *is* committed is everything needed to check the reasoning rather than
+re-run it: the frozen universe, the pre-registrations, the full trial ledger, and
+the results files behind the tables below. Per-run artifacts in `runs/` are not
+kept, so tables here cite the committed reports under `docs/`, the durable record.
 
 ## The correctness core
 

@@ -47,6 +47,12 @@ def test_degenerate_split_fails_loud():
         purged_split(a, 0.70, 0.15, horizon=20)
 
 
+def _panel_exists() -> bool:
+    from crossfolio.config import PANEL
+    return PANEL.exists()
+
+
+@pytest.mark.skipif(not _panel_exists(), reason="needs data/panel.npz (gitignored; built from a private lake)")
 def test_holdout_wall():
     """Round 5: dev_panel cannot reach holdout returns, even through grading."""
     import numpy as np

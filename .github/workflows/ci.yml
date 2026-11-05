@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install (CPU-only torch)
+        run: uv sync --locked --extra cpu --python 3.12
+      # Leakage probes, purged splits, synthetic harness. The holdout-wall test
+      # skips itself: it needs the private data/panel.npz.
+      - name: Test
+        run: uv run --no-sync pytest -q
+      # Plants a synthetic signal and fails unless the harness detects it while
+      # the gamma=0 null stays null. No private data; about a minute on CPU.
+      - name: Quick demo (planted-signal recovery)
+        run: uv run --no-sync crossfolio demo --check

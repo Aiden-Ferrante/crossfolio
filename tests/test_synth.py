@@ -73,7 +73,10 @@ def test_synthetic_panel_passes_leakage_probe():
     d = int(anchors[i])
     X_before, y_before, _ = ds[i]
     poisoned = Panel(p.dates, p.returns.copy(), p.spy.copy(), p.tickers)
-    poisoned.returns[d + 1 :] = 9.9
+    # Any value far from real returns works. 9.9/day summed over H days
+    # overflowed float32 expm1 (inf target + RuntimeWarning); 1.0/day is still
+    # absurd (+172% a day) and stays finite.
+    poisoned.returns[d + 1 :] = 1.0
     X_after, y_after, _ = AnchorDataset(poisoned, anchors, cfg)[i]
     assert torch.equal(X_before, X_after)
     assert not torch.equal(y_before, y_after)

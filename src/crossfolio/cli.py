@@ -1,4 +1,4 @@
-"""crossfolio CLI: build-dataset | inspect | stage0 | train | evaluate."""
+"""crossfolio CLI: demo | build-dataset | inspect | stage0 | train | evaluate | power | campaign | probe."""
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="crossfolio", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    p_demo = sub.add_parser("demo", help="CPU quick demo, no data needed: recover a planted synthetic signal")
+    p_demo.add_argument("--seed", type=int, default=0)
+    p_demo.add_argument("--check", action="store_true",
+                        help="exit non-zero unless the null is null and the strong signal is detected")
     sub.add_parser("build-dataset", help="read the stocklake lake, write data/panel.npz")
     sub.add_parser("inspect", help="print panel + split summary")
     sub.add_parser("stage0", help="the original idea: direct trainable weights, both losses")
@@ -42,7 +46,11 @@ def main() -> None:
 
     args = ap.parse_args()
 
-    if args.cmd == "build-dataset":
+    if args.cmd == "demo":
+        from .demo import run_demo
+
+        run_demo(seed=args.seed, check=args.check)
+    elif args.cmd == "build-dataset":
         from .data.build import build_panel
 
         try:

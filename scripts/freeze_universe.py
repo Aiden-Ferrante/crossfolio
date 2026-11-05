@@ -4,9 +4,9 @@ sector labels) into src/crossfolio/universe.py, which is committed.
 
 Dev-time script. Run with stocklake's venv (it has duckdb + yfinance + pandas):
 
-    ~/Desktop/code/stocklake/.venv/bin/python scripts/freeze_universe.py --candidates
+    CROSSFOLIO_LAKE=<lake>/raw/prices <stocklake-venv>/bin/python scripts/freeze_universe.py --candidates
     # refresh the printed tickers via stocklake ingest, then:
-    ~/Desktop/code/stocklake/.venv/bin/python scripts/freeze_universe.py --freeze
+    CROSSFOLIO_LAKE=<lake>/raw/prices <stocklake-venv>/bin/python scripts/freeze_universe.py --freeze
 
 The crossfolio runtime never imports this; yfinance is allowed here only.
 """
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -23,7 +24,7 @@ from pathlib import Path
 
 import duckdb
 
-LAKE = Path("~/Desktop/code/stocklake/lake/raw/prices").expanduser()
+LAKE = Path(os.environ.get("CROSSFOLIO_LAKE", "")).expanduser()
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "src" / "crossfolio" / "universe.py"
 SECTOR_CACHE = REPO / "data" / "sector_cache.json"
@@ -126,6 +127,8 @@ def main() -> None:
     mode.add_argument("--freeze", action="store_true",
                       help="apply all filters incl. freshness, fetch sectors, write universe.py")
     args = ap.parse_args()
+    if not os.environ.get("CROSSFOLIO_LAKE") or not LAKE.is_dir():
+        sys.exit("set $CROSSFOLIO_LAKE to the stocklake prices folder (per-ticker parquet)")
 
     con = duckdb.connect()
     rows, lake_max, spy_days = scan(con)

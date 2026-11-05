@@ -5,11 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 import json
+import os
 
 REPO = Path(__file__).resolve().parent.parent.parent
-LAKE = Path("~/Desktop/code/stocklake/lake/raw/prices").expanduser()
+LAKE_ENV = "CROSSFOLIO_LAKE"
 PANEL = REPO / "data" / "panel.npz"
 RUNS = REPO / "runs"
+
+
+def lake() -> Path:
+    """The price lake: a folder of per-ticker parquet (date, ticker, adj_close).
+
+    Read from $CROSSFOLIO_LAKE at call time, so importing the package (tests,
+    the synthetic power harness) never needs private data.
+    """
+    raw = os.environ.get(LAKE_ENV)
+    if not raw:
+        raise RuntimeError(
+            f"${LAKE_ENV} is not set. Point it at a folder with one parquet per "
+            "ticker in src/crossfolio/universe.py plus SPY (columns date, ticker, "
+            "adj_close). Only `crossfolio build-dataset` needs it; tests and "
+            "`crossfolio demo` run without it."
+        )
+    path = Path(raw).expanduser()
+    if not path.is_dir():
+        raise FileNotFoundError(f"${LAKE_ENV}={raw} is not a directory")
+    return path
 
 
 @dataclass(frozen=True)

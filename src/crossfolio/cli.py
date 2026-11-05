@@ -45,7 +45,10 @@ def main() -> None:
     if args.cmd == "build-dataset":
         from .data.build import build_panel
 
-        info = build_panel()
+        try:
+            info = build_panel()
+        except (RuntimeError, FileNotFoundError, ValueError) as e:
+            raise SystemExit(f"build-dataset: {e}") from None
         print(f"panel: {info['path']}")
         print(f"  D={info['D']} days x N={info['N']} stocks, {info['start']} -> {info['end']}")
         print(f"  intersection dropped {info['dropped_frac']:.2%} of benchmark days")

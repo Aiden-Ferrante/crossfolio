@@ -27,7 +27,7 @@ import numpy as np
 import torch
 
 from .config import RUNS, Cfg, DataCfg, ModelCfg
-from .data.splits import purged_split, valid_anchors
+from .data.splits import LeakageError, purged_split, valid_anchors
 from .losses import mean_ic, rank_ic
 from .models import REGISTRY
 from .synth import make_cocktail_panel, make_panel, make_shocks
@@ -160,7 +160,8 @@ class Pretrainer:
         # normalize through JSON: tuples become lists on either path
         same = json.loads(json.dumps(ck["cfg"], default=list)) == \
                json.loads(json.dumps(asdict(self.p), default=list))
-        assert same, "config changed since checkpoint — refuse resume"
+        if not same:
+            raise ValueError("config changed since checkpoint — refuse resume")
         self.model.load_state_dict(ck["model"])
         self.ema.load_state_dict(ck["ema"])
         self.opt.load_state_dict(ck["opt"])
@@ -250,7 +251,8 @@ class Pretrainer:
                                     enabled=self.device == "cuda"):
                     _, aux = self.model(X[idx])
                     loss = -mean_ic(aux["logits"].float(), y[idx].float())
-                assert torch.isfinite(loss), f"non-finite loss at step {self.step}"
+                if not torch.isfinite(loss):
+                    raise FloatingPointError(f"non-finite loss at step {self.step}")
                 self.opt.zero_grad()
                 loss.backward()
                 # warmup
@@ -356,7 +358,8 @@ def walkforward_folds(panel, T: int, H: int, start_year: int = 2014):
         cut = int(len(trainval) * 0.85)
         tr, va = trainval[:cut], trainval[cut:]
         tr = tr[tr + H < va.min()]                              # purge vs val
-        assert tr.max() + H < va.min() and va.max() + H < test.min()
+        if not (tr.max() + H < va.min() and va.max() + H < test.min()):
+            raise LeakageError(f"walk-forward fold {y}: a grading window crosses a boundary")
         folds.append((y, tr, va, test))
     return folds
 
@@ -416,7 +419,8 @@ def run_stage_d(pretrained_ckpt: Path, seeds: int = 5, out_name: str | None = No
                                             enabled=device == "cuda"):
                             _, aux = model(Xtr[idx])
                             loss = -mean_ic(aux["logits"].float(), ytr[idx].float())
-                        assert torch.isfinite(loss)
+                        if not torch.isfinite(loss):
+                            raise FloatingPointError("non-finite loss in stage D")
                         opt.zero_grad(); loss.backward(); opt.step()
                     model.eval()
                     with torch.no_grad():

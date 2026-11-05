@@ -29,7 +29,8 @@ def dev_panel() -> Panel:
     p = load_panel()
     cfg = Cfg()
     cut = int(np.searchsorted(p.dates, HOLDOUT_START)) - cfg.data.H
-    assert cut > 0, "holdout boundary outside panel"
+    if cut <= 0:
+        raise ValueError("holdout boundary outside panel")
     return Panel(p.dates[:cut], p.returns[:cut], p.spy[:cut], p.tickers)
 
 

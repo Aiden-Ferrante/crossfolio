@@ -14,6 +14,10 @@ from __future__ import annotations
 import numpy as np
 
 
+class LeakageError(RuntimeError):
+    """A grading window crosses a split boundary: results would be contaminated."""
+
+
 def valid_anchors(D: int, T: int, H: int) -> np.ndarray:
     """Panel row indices d with T trailing returns (rows d-T+1..d) and H forward rows."""
     return np.arange(T - 1, D - H, dtype=np.int64)
@@ -36,12 +40,16 @@ def purged_split(
     val = anchors[(anchors >= d_val) & (anchors < d_test) & (anchors + horizon < d_test)]
     test = anchors[anchors >= d_test]
 
-    assert len(train) and len(val) and len(test), "empty split block"
-    assert train.max() + horizon < val.min(), "train grading window reaches into val"
-    assert val.max() + horizon < test.min(), "val grading window reaches into test"
+    if not (len(train) and len(val) and len(test)):
+        raise ValueError("empty split block")
+    if train.max() + horizon >= val.min():
+        raise LeakageError("train grading window reaches into val")
+    if val.max() + horizon >= test.min():
+        raise LeakageError("val grading window reaches into test")
     # anchors from valid_anchors() are consecutive integers, so each boundary
     # drops exactly `horizon` anchors; pass consecutive anchors only.
-    assert len(train) + len(val) + len(test) == n - 2 * horizon, (
-        "purge should drop exactly `horizon` anchors per boundary (consecutive anchors required)"
-    )
+    if len(train) + len(val) + len(test) != n - 2 * horizon:
+        raise LeakageError(
+            "purge should drop exactly `horizon` anchors per boundary (consecutive anchors required)"
+        )
     return train, val, test

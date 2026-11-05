@@ -23,7 +23,8 @@ from .base import Allocator
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, d_model: int, heads: int):
         super().__init__()
-        assert d_model % heads == 0
+        if d_model % heads:
+            raise ValueError(f"d_model={d_model} is not divisible by heads={heads}")
         self.heads, self.dk = heads, d_model // heads
         self.qkv = nn.Linear(d_model, 3 * d_model)
         self.proj = nn.Linear(d_model, d_model)

@@ -43,7 +43,7 @@ def test_blocks_are_chronological():
 
 def test_degenerate_split_fails_loud():
     a = valid_anchors(40, T, H)  # too small: purge eats a whole block
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         purged_split(a, 0.70, 0.15, horizon=20)
 
 

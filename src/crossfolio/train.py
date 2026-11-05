@@ -80,7 +80,8 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
         # pretrained checkpoint: strict=False leaves layers absent from the
         # checkpoint (e.g. a fresh id_embed) at their fresh init
         missing, unexpected = model.load_state_dict(init_state, strict=False)
-        assert not unexpected, f"unexpected keys in init_state: {unexpected}"
+        if unexpected:
+            raise ValueError(f"unexpected keys in init_state: {unexpected}")
     loss_fn = make_loss(cfg.loss.name, cfg.loss.hhi_lambda)
     n_params = sum(p.numel() for p in model.parameters())
 
@@ -117,7 +118,8 @@ def train(model_name: str, cfg: Cfg | None = None, panel: Panel | None = None,
             opt.zero_grad()
             w, aux = model(X)
             loss = loss_fn(w, y, y_spy, logits=aux["logits"])
-            assert torch.isfinite(loss), f"non-finite loss at epoch {epoch}"
+            if not torch.isfinite(loss):
+                raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             loss.backward()
             opt.step()
 

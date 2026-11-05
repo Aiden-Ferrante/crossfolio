@@ -55,7 +55,8 @@ def run(cfg: Cfg | None = None) -> None:
             opt.zero_grad()
             w = torch.softmax(theta, dim=-1).unsqueeze(0).expand(len(train), -1)
             loss = loss_fn(w, y_tr, spy_tr)
-            assert torch.isfinite(loss), "non-finite stage-0 loss"
+            if not torch.isfinite(loss):
+                raise FloatingPointError("non-finite stage-0 loss")
             loss.backward()
             opt.step()
 

@@ -10,6 +10,10 @@ dependencies = [
     "matplotlib>=3.9",
 ]
 
+[project.optional-dependencies]
+cpu = ["torch>=2.13"]
+cu130 = ["torch>=2.13"]
+
 [dependency-groups]
 dev = ["pytest>=8.0"]
 
@@ -23,8 +27,23 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/crossfolio"]
 
+# Torch comes from default PyPI unless an extra picks an index:
+#   uv sync                 -> PyPI torch (CPU everywhere; CUDA-bundled on x86_64 Linux)
+#   uv sync --extra cpu     -> slim CPU-only wheels (what CI uses)
+#   uv sync --extra cu130   -> CUDA 13.0 wheels (the author's GPU box)
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
+
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu130" }]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

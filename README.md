@@ -1,203 +1,64 @@
 # crossfolio
 
-A pre-registered neural portfolio allocator for a 405-stock universe, graded on
-chronological purged splits with an untouched 2-year holdout and every trial
-ledgered.
+[![CI](https://github.com/Aiden-Ferrante/crossfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/Aiden-Ferrante/crossfolio/actions/workflows/ci.yml)
 
-**Result:** honest negative. The best holdout was +0.94 net excess Sharpe @10bps
-at t = 1.35 over 25 months — not significant (`docs/edge/VERDICT.md`). And a
+A neural portfolio allocator for a 405-stock universe, built mainly as an
+**evaluation harness**: the part worth reading is how claims get checked.
+
+**Result: honest negative.** The best holdout was +0.94 net excess Sharpe @10bps
+at t = 1.35 over 25 months, not significant (`docs/edge/VERDICT.md`). A
 zero-parameter 5-day reversal baseline (+0.913 net on dev) beat the best learned
 arm (+0.856) (`docs/edge/ledger.jsonl`, round 7 vs round 6).
 
-## Quickstart
+## The evaluation method
+
+- **Pre-registration.** Metric, success threshold, cost model and candidate
+  budget are committed before any run (`docs/edge/PREREGISTRATION.md`); every
+  trained variant goes into a ledger (`docs/edge/ledger.jsonl`, 80 rows) and the
+  dev claim is Bonferroni-deflated by the ledger's trial count.
+- **Leakage poison probe.** Overwrite every panel row after the anchor with
+  garbage and assert the features are bit-identical (`tests/test_dataset.py`,
+  `tests/test_synth.py`).
+- **Purged chronological splits.** Overlapping daily anchors make random splits
+  leak, so blocks are chronological with an H-anchor purge at each boundary;
+  `data/splits.py` raises `LeakageError` if any grading window crosses one.
+- **Holdout wall.** Dev code can only load `edge.dev_panel()`, truncated before
+  2024-07-26; `scripts/holdout_once.py` is the one full-panel reader, and a test
+  enforces the wall.
+- **Power test first.** Before trusting a real-data null, plant signals of known
+  strength in synthetic data and measure what the harness can detect
+  (`docs/power/`), with null runs as false-positive controls.
+
+## Quickstart (CPU, no private data)
 
 ```bash
-uv sync          # torch comes from the cu130 index (see pyproject)
-uv run pytest    # leakage tests, synthetic power harness: 48 pass, 1 skip on a fresh clone
+uv sync --extra cpu          # or plain `uv sync` (PyPI torch); `--extra cu130` for CUDA 13
+uv run pytest -q             # 48 passed, 1 skipped (holdout wall: needs the private panel)
+uv run crossfolio demo       # plant a signal, see if the harness finds it (45 s on CPU)
 ```
 
-The skip is the holdout-wall test, which needs `data/panel.npz`. The panel is
-**not** in the repo: it is built from `stocklake`, a private local price lake of
-mine (yfinance-fed per-ticker parquet), which stays private. To use your own
-data, write one parquet per ticker in `src/crossfolio/universe.py` plus SPY,
-with columns `date, ticker, adj_close`, point `LAKE` in
-`src/crossfolio/config.py` at that folder, then run
-`uv run crossfolio build-dataset`. `data/build.py` is the only code that reads
-the lake. The `deploy/` unit and `scripts/freeze_universe.py` assume my local
-`~/Desktop/code/` layout and are kept as a record, not as something to run.
+The demo output from a CPU-only run (seed 0, N=405, D=5000, p7_encoder/IC loss):
 
-With a panel in place:
-
-```bash
-uv run crossfolio build-dataset          # lake parquet -> data/panel.npz
-uv run crossfolio inspect                # panel + purged split summary
-uv run crossfolio stage0                 # the original idea, both losses side by side
-uv run crossfolio train --model attention
-uv run crossfolio evaluate --compare runs/<eq> runs/<linear> runs/<attention>
 ```
+gamma bps/mo  oracle IC  model IC    2*SE  recovery  verdict
+           0    -0.0119   -0.0012  0.0082        - null (control: should be null)
+          40    +0.0125   +0.0101  0.0082      81% DETECTED
+          80    +0.0373   +0.0360  0.0082      96% DETECTED
+```
+
+Real data: set `CROSSFOLIO_LAKE` to a folder with one parquet per ticker in
+`src/crossfolio/universe.py` plus SPY (`date, ticker, adj_close`), then
+`uv run crossfolio build-dataset`. The author's lake (`stocklake`) is private.
 
 ## What went wrong / what I learned
 
-- **No demonstrated edge.** Round 5 met its registered thresholds, but the dev
-  claim deflates past significance under the ledger's 10-trial Bonferroni, and
-  Round 6's "better" regime feature came back lower on the holdout (+0.72).
-- **A free baseline beat the models.** Plain 5-day reversal, zero parameters,
-  out-scored every learned arm; it is a single unconfirmed run, disclosed as such.
-- **Attention hurt.** Flattening it to uniform improved detection
-  (`docs/probes/PROBES.md`), and pretraining tied scratch (`docs/campaign/D_REPORT.md`).
-- **A grading bug was caught and kept.** v1 graded against SPY instead of the
-  pre-registered equal-weight benchmark; it was ledgered as an amendment and the
-  invalid rows were kept, not deleted.
+- **No demonstrated edge**, and Round 6's "better" regime feature came back
+  lower on the holdout (+0.72), which has now been consumed twice.
+- **A free baseline beat the models**; it is a single unconfirmed run, disclosed as such.
+- **Attention hurt**: flattening it to uniform improved detection (`docs/probes/PROBES.md`).
+- **A grading bug was caught and kept**: v1 graded against SPY, not the
+  registered equal-weight benchmark; ledgered as an amendment, rows kept.
 
-## Design
-
-A neural portfolio allocator built as a learning instrument: the network outputs
-an **allocation** (softmax over the 405-name universe); **alpha is the grade, not
-the output** — the loss computes it from the allocation and the next 5 trading
-days of realized returns. There is no return-prediction head, and portfolio
-dollar size is never an input (it's a scale factor at reporting time).
-
-Current config (`src/crossfolio/config.py`, campaign v2): **N = 405** names,
-**T = 120**-day trailing window, **H = 5** (weekly grading), window
-normalization off. Campaign v1 ran N = 120 / T = 60 / H = 21; older reports
-under `docs/power/` were produced at those settings.
-
-Born from one idea — *"what if the network's weights were the dollar
-allocations?"* — grown into a ladder. Parameter counts at the current config:
-
-| stage | architecture | params | what it teaches |
-|---|---|---|---|
-| `stage0` | no input; the allocation vector IS the parameters | 405 | optimization wearing NN clothes; the all-in-on-the-ex-post-winner failure mode |
-| `linear` | flatten(N×T) → linear → softmax | 19.7M | the bag-of-words baseline; guaranteed overfitting vs a few hundred effective months |
-| `attention` | shared per-stock encoder + self-attention **across stocks** | 36k | "a stock is a token, the universe at a moment is the sentence"; parameter sharing |
-| `p7` | the same backbone with **no** cross-stock interaction | 18k | the probe verdict: attention never earned its place (Round 3) |
-
-Parameter sharing is the counter-lesson to the linear baseline: 36k shared
-weights learn what 19.7M unshared ones cannot, and 18k of attention-free
-encoder beat both.
-
-The wider frame: an architecture is a testable hypothesis about how markets
-generate returns. Every arm runs on a **shared harness** — same data, same
-purged splits, same loss — and is adjudicated by internal evidence (do
-attention heads recover sector structure?) rather than leaderboard Sharpe.
-
-What *is* committed is everything needed to check the reasoning rather than
-re-run it: the frozen universe, the pre-registrations, the full trial ledger, and
-the results files behind the tables below. Per-run artifacts in `runs/` are not
-kept, so tables here cite the committed reports under `docs/`, the durable record.
-
-## The correctness core
-
-Daily-anchored examples overlap heavily (adjacent anchors share most of their
-input window), so **random train/test splits leak catastrophically**. Splits are
-chronological blocks with an H-anchor purge/embargo at each boundary
-(`data/splits.py` asserts at runtime that no grading window crosses a boundary,
-and that each boundary drops exactly H anchors), and `tests/test_dataset.py`
-contains the probe that matters: poison every panel row after the anchor and
-assert features are unchanged.
-
-Development code may load the panel only through `edge.dev_panel()`, which
-truncates it so no development anchor's grading window can reach the holdout.
-`scripts/holdout_once.py` is the single permitted reader of the full panel.
-
-## Honest caveats — read before interpreting any number
-
-- **No demonstrated edge.** The best holdout result is +0.94 net excess Sharpe
-  at t = 1.35 over 25 months — suggestive, not significant. See the verdicts
-  below.
-- **A zero-parameter baseline is competitive with every model here.** Plain
-  5-day reversal scores +0.913 net @10bps against the best learned arm's
-  +0.856 (`docs/edge/ledger.jsonl`). It is a single unconfirmed run, disclosed
-  as measured before its pre-registration — but no learned result should be
-  read without it.
-- **Attention is causally harmful to signal extraction** on this data: flattening
-  it to uniform *improves* detection (`docs/probes/PROBES.md`). Deleting it
-  outright reproduced the whole sim2real campaign's gain for free
-  (`docs/power/v3/ROUND3.md`).
-- **Pretraining bought nothing.** Walk-forward 2014–2026: scratch +0.0056,
-  full-finetune +0.0065, head-only +0.0049, against 2·SE of ±0.014–0.017 — a
-  clean tie (`docs/campaign/D_REPORT.md`).
-- **Survivorship bias**: the universe is today's lake ranked by today's
-  liquidity; every backtest row is inflated by it, roughly equally.
-- **Spinoff distortion**: yfinance adj_close handles splits+dividends, not
-  spinoff value (GE breakup etc.).
-- **The later power rounds' null runs cross the detection threshold too often.**
-  v1 and v2 were clean (0/12, 0/8), but v3 logged 2/9 and 3/12 and v4 logged
-  5/15 null runs crossing 2·SE, each marked INVESTIGATE in its own report and
-  unresolved. At a 2σ threshold ~5% is expected, so a "detection" in Rounds 3–4
-  is weaker evidence than the word implies. Treat those detection floors as
-  provisional.
-- **Batch-Sharpe** mixes market regimes within a shuffled batch — its std is
-  cross-regime, not sequential; loss values are batch-size dependent.
-- Long-only, fully invested, no shorting, frozen universe. Costs are a linear
-  10 bps each way on turnover, with no market impact.
-
-## The power test (docs/power/)
-
-Before iterating on real-data training, we planted signals of known strength in
-synthetic data (`crossfolio power`) and measured what the harness can recover.
-Results ([curve](docs/power/power_curve.png), [full report](docs/power/POWER.md),
-3 paired seeds, pre-registered thresholds, 0/12 false positives at γ=0):
-
-| arm | minimum detected signal |
-|---|---|
-| attention / IC loss | **40 bps/month** (~80% oracle recovery at 80 bps) |
-| attention / Sharpe loss | 80 bps/month |
-| linear / either loss | never — blind at all strengths |
-
-Three conclusions carry the project: **(1)** densified cross-sectional
-supervision (IC loss) roughly halves the detectable signal strength — the
-supervision-starvation diagnosis is confirmed and quantified; **(2)** parameter
-sharing, not capacity, is what separates architectures here; **(3)** time-axis
-window normalization provably erases momentum-level signals (`test_synth.py`),
-so it is off by default. Later rounds sharpened (2): the attention-free `p7`
-encoder detects at 20 bps and hits 70% oracle recovery at 40 bps, beating the
-full attention model and the entire sim2real pipeline
-([Round 3](docs/power/v3/ROUND3.md)); a correlation-biased attention variant is
-the first arm to break the per-stock ceiling
-([Round 4](docs/power/v4/ROUND4.md)).
-
-For calibration: real cross-sectional anomalies are believed to live in the
-~10–40 bps/month range — at the edge of, and mostly below, this harness's
-detection floor. That is the honest context for any real-data result.
-
-Two standing qualifications on this section: later reports run at the v2 config,
-so numbers are not directly comparable across campaign versions; and the
-Round 3–4 detections carry the unresolved null-crossing rate noted in the
-caveats above.
-
-## Repo map
-
-See [ARCHITECTURE.md](ARCHITECTURE.md). One-line version: `config ← data ←
-{models, losses} ← train ← evaluate/plots ← cli`; only `data/build.py` touches
-the lake; only `train.py`/`evaluate.py` write `runs/`.
-
-## Is there an actual edge? (docs/edge/)
-
-Under pre-registered discipline — an untouched 2-year holdout, every trial
-ledgered, net-of-costs only:
-
-| round | dev net @10bps | holdout net @10bps | t (25 mo) |
-|---|---|---|---|
-| [5](docs/edge/VERDICT.md) — p7 + position smoothing | +0.62 | **+0.94** (+1.01/+0.79 at 5/20 bps) | 1.35 |
-| [6](docs/edge/ROUND6.md) — + SPD/log-Euclidean regime feature | +0.856 | **+0.72** (+0.80/+0.58) | 1.04 |
-
-Round 5 met its registered thresholds, but the development claim deflates past
-significance under the 10-valid-trial Bonferroni from the ledger, and a
-true-zero strategy produces a holdout like that roughly one time in ten.
-
-Round 6 is the more instructive result: the regime feature added +0.24 on dev
-and came back **lower** on the holdout. At 25 months the two reads are
-noise-compatible, and the holdout has now been consumed twice, which degrades
-its remaining evidentiary value. Round 6 also returned two confirmed nulls —
-KL-to-EW, HHI and no penalty agree to three decimals, and no optimizer beats
-Adam.
-
-Verdict: **no demonstrated edge.** A frozen, paper-tracked champion evaluated in
-true walk-forward time is the registered path to a real answer. Not investment
-advice; not a basis for deploying money.
-
-Process note: the v1 evaluation bug (graded against SPY rather than the
-pre-registered equal-weight benchmark) was caught, ledgered as an amendment,
-and the invalid rows were kept rather than deleted — see
-[`ledger.jsonl`](docs/edge/ledger.jsonl).
+Full design, every caveat (survivorship, spinoffs, null crossings in power
+rounds 3–4) and the round tables: [docs/RESULTS.md](docs/RESULTS.md). Code map:
+[ARCHITECTURE.md](ARCHITECTURE.md). Not investment advice.

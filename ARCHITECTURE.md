@@ -14,8 +14,8 @@ lazy imports per subcommand. No module imports a sibling to its right.
 |---|---|---|
 | `universe.py` | frozen (ticker, sector) list; N derives from it, nothing hardcodes N | how the universe was selected (scripts/freeze_universe.py) |
 | `config.py` | every knob as frozen dataclasses + repo paths | — |
-| `data/build.py` | **the only lake reader**: parquet → aligned log-return panel → `data/panel.npz` | stocklake layout, DuckDB, alignment/gap policy |
-| `data/splits.py` | anchor enumeration + purged chronological split; asserts invariants at runtime | embargo arithmetic |
+| `data/build.py` | **the only lake reader**: parquet → aligned log-return panel → `data/panel.npz` | stocklake layout (`$CROSSFOLIO_LAKE`), DuckDB, alignment/gap policy |
+| `data/splits.py` | anchor enumeration + purged chronological split; checks invariants at runtime (raises `LeakageError`) | embargo arithmetic |
 | `data/dataset.py` | Panel + AnchorDataset: anchor → (X, y, y_spy) | window slicing, normalization, log→simple return conversion |
 | `models/` | Allocator contract `forward(X)->(softmax w, aux)` + registry | each architecture's internals; attention exposes `aux["attn"]` deliberately |
 | `losses.py` | pure fns of (w, y, y_spy): batch-Sharpe / mean-excess + HHI | the grading — models never see returns |
@@ -35,7 +35,7 @@ lazy imports per subcommand. No module imports a sibling to its right.
 
 1. Allocation out, alpha as loss — no return-prediction head anywhere.
 2. Features at anchor d use only rows ≤ d (probe-tested); grading windows never
-   cross split boundaries (21-day purge, runtime-asserted).
+   cross split boundaries (21-day purge, checked at runtime).
 3. Time blocks never mix in a batch; shuffling happens within train only.
 4. Runtime is keyless/local (yfinance only inside the dev-time freeze script).
 5. The harness is model-agnostic: a new architecture = one file + one registry
